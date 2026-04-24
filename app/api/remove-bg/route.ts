@@ -13,31 +13,77 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "图片太大，请上传 10MB 以内的图片" }, { status: 400 });
     }
 
-    // remove.bg API（稳定可用，免费版约 500px；Vercel 上可换 PhotoRoom）
-    const rbFormData = new FormData();
-    rbFormData.append("image_file", file);
-    rbFormData.append("size", "regular");
+    // 把文件转成 base64 data URL，传给 Replicate
+    const arrayBuffer = await file.arrayBuffer();
+    const base64 = Buffer.from(arrayBuffer).toString("base64");
+    const mimeType = file.type || "image/jpeg";
+    const dataUrl = `data:${mimeType};base64,${base64}`;
 
-    const response = await fetch("https://api.remove.bg/v1.0/removebg", {
+    // 调用 Replicate rembg 模型（高质量抠图，保留原始分辨率）
+    const createRes = await fetch("https://api.replicate.com/v1/predictions", {
       method: "POST",
       headers: {
-        "X-Api-Key": process.env.REMOVE_BG_API_KEY ?? "",
+        "Authorization": `Bearer ${process.env.REPLICATE_API_TOKEN}`,
+        "Content-Type": "application/json",
+        "Prefer": "wait", // 同步等待结果，最多等 60s
       },
-      body: rbFormData,
+      body: JSON.stringify({
+        version: "fb8af171cfa1616ddcf1242c093f9c46bcada5ad4cf6f2fbe8b81b330ec5c003",
+        input: { image: dataUrl },
+      }),
     });
 
-    if (!response.ok) {
-      const errText = await response.text();
-      console.error("[remove-bg] remove.bg error:", errText);
-      return NextResponse.json(
-        { error: `抠图失败，请稍后重试（${response.status}）` },
-        { status: 500 }
-      );
+    if (!createRes.ok) {
+      const errText = await createRes.text();
+      console.error("[remove-bg] Replicate create error:", errText);
+      return NextResponse.json({ error: `抠图失败（${createRes.status}）` }, { status: 500 });
     }
 
-    const resultBuffer = await response.arrayBuffer();
+    const prediction = await createRes.json();
 
-    return new NextResponse(resultBuffer, {
+    // Prefer: wait 时直接拿结果，否则轮询
+    let outputUrl: string | null = null;
+
+    if (prediction.status === "succeeded" && prediction.output) {
+      outputUrl = prediction.output as string;
+    } else if (prediction.status === "failed") {
+      console.error("[remove-bg] Replicate failed:", prediction.error);
+      return NextResponse.json({ error: "抠图失败，请重试" }, { status: 500 });
+    } else {
+      // 轮询（最多 30 次 × 2s = 60s）
+      const pollUrl = prediction.urls?.get;
+      if (!pollUrl) {
+        return NextResponse.json({ error: "无法获取任务状态" }, { status: 500 });
+      }
+      for (let i = 0; i < 30; i++) {
+        await new Promise((r) => setTimeout(r, 2000));
+        const pollRes = await fetch(pollUrl, {
+          headers: { "Authorization": `Bearer ${process.env.REPLICATE_API_TOKEN}` },
+        });
+        const pollData = await pollRes.json();
+        if (pollData.status === "succeeded") {
+          outputUrl = pollData.output as string;
+          break;
+        }
+        if (pollData.status === "failed") {
+          console.error("[remove-bg] Replicate poll failed:", pollData.error);
+          return NextResponse.json({ error: "抠图失败，请重试" }, { status: 500 });
+        }
+      }
+    }
+
+    if (!outputUrl) {
+      return NextResponse.json({ error: "抠图超时，请重试" }, { status: 500 });
+    }
+
+    // 下载结果图片并转发给前端
+    const imgRes = await fetch(outputUrl);
+    if (!imgRes.ok) {
+      return NextResponse.json({ error: "结果图片获取失败" }, { status: 500 });
+    }
+    const imgBuffer = await imgRes.arrayBuffer();
+
+    return new NextResponse(imgBuffer, {
       headers: {
         "Content-Type": "image/png",
         "Cache-Control": "no-store",
