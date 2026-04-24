@@ -116,7 +116,7 @@ export async function POST(req: NextRequest) {
       .png()
       .toBuffer();
 
-    return new NextResponse(cleanedBuffer, {
+    return new NextResponse(new Uint8Array(cleanedBuffer), {
       headers: {
         "Content-Type": "image/png",
         "Cache-Control": "no-store",
