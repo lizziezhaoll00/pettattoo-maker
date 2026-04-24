@@ -95,7 +95,7 @@ export default function Uploader() {
         <input {...getInputProps()} />
 
         {loading ? (
-          <LoadingCat text="🐾 正在提取毛孩子的灵魂轮廓，稍等一下下~" />
+          <LoadingCat text="🐾 正在提取毛孩子的灵魂轮廓，稍等一下下" />
         ) : (
           <div className="flex flex-col items-center gap-4">
             <div className="text-6xl">🐾</div>
