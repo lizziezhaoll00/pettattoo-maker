@@ -119,7 +119,7 @@ export default function EditorPage() {
   if (!originalUrl && isRemoving) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-amber-50">
-        <LoadingCat text="🐾 正在提取毛孩子的灵魂轮廓，稍等一下下" />
+        <LoadingCat text="🐾 正在勾勒毛孩子的灵魂轮廓，稍等一下下" />
       </div>
     );
   }
