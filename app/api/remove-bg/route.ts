@@ -15,7 +15,7 @@ export async function POST(req: NextRequest) {
 
     // PhotoRoom API（Vercel 海外服务器可访问，返回原始分辨率）
     const prFormData = new FormData();
-    prFormData.append("imageFile", file);
+    prFormData.append("image_file", file);
 
     const response = await fetch("https://sdk.photoroom.com/v1/segment", {
       method: "POST",
