@@ -1,31 +1,68 @@
 import { ColorMode, SizeKey, SIZE_CONFIG } from "@/store/editorStore";
 
 /**
- * 给图片 URL 加上白边描边（膨胀算法）
- * 返回带白边的 canvas dataURL
+ * 给图片加上白边描边
+ * 原理：
+ *   1. 先把原图偏移若干像素绘制 N 个方向，形成"膨胀"轮廓
+ *   2. 用 destination-out 把原图区域抠掉，只留轮廓
+ *   3. 把轮廓染成白色（source-in）
+ *   4. 最后在白色轮廓上方叠回原图
+ * 这样白边只出现在轮廓外侧，不会产生黑边
  */
 export function addWhiteBorder(
   img: HTMLImageElement,
-  borderPx = 3
+  borderPx = 6
 ): HTMLCanvasElement {
-  const w = img.naturalWidth + borderPx * 2;
-  const h = img.naturalHeight + borderPx * 2;
+  const sw = img.naturalWidth;
+  const sh = img.naturalHeight;
+  const w = sw + borderPx * 2;
+  const h = sh + borderPx * 2;
+  const ox = borderPx; // 原图在大画布上的偏移
+  const oy = borderPx;
 
+  // Step 1: 在 offscreen canvas 上画出膨胀后的轮廓（把原图向 8 个方向+多圈偏移绘制）
+  const outline = document.createElement("canvas");
+  outline.width = w;
+  outline.height = h;
+  const octx = outline.getContext("2d")!;
+
+  const steps = Math.ceil(borderPx / 2);
+  for (let r = 1; r <= steps; r++) {
+    const d = r * 2;
+    for (let dx = -d; dx <= d; dx += d) {
+      for (let dy = -d; dy <= d; dy += d) {
+        octx.drawImage(img, ox + dx, oy + dy);
+      }
+    }
+    // 水平 / 垂直方向补充
+    octx.drawImage(img, ox + d, oy);
+    octx.drawImage(img, ox - d, oy);
+    octx.drawImage(img, ox, oy + d);
+    octx.drawImage(img, ox, oy - d);
+  }
+
+  // Step 2: destination-out 把原图区域抠掉，只保留外轮廓
+  octx.globalCompositeOperation = "destination-out";
+  octx.drawImage(img, ox, oy);
+  octx.globalCompositeOperation = "source-over";
+
+  // Step 3: source-in 把轮廓染成纯白
+  const white = document.createElement("canvas");
+  white.width = w;
+  white.height = h;
+  const wctx = white.getContext("2d")!;
+  wctx.drawImage(outline, 0, 0);
+  wctx.globalCompositeOperation = "source-in";
+  wctx.fillStyle = "white";
+  wctx.fillRect(0, 0, w, h);
+
+  // Step 4: 合成最终结果：白色轮廓 + 原图
   const canvas = document.createElement("canvas");
   canvas.width = w;
   canvas.height = h;
   const ctx = canvas.getContext("2d")!;
-
-  // 用 shadow 模拟描边（最简单方案，效果好）
-  ctx.shadowColor = "white";
-  ctx.shadowBlur = borderPx * 2;
-  // 多次绘制加强白边
-  for (let i = 0; i < 4; i++) {
-    ctx.drawImage(img, borderPx, borderPx);
-  }
-  ctx.shadowBlur = 0;
-  // 最后再绘制一次原图覆盖（保持清晰）
-  ctx.drawImage(img, borderPx, borderPx);
+  ctx.drawImage(white, 0, 0);       // 白色轮廓层
+  ctx.drawImage(img, ox, oy);       // 原图层（覆盖在上方）
 
   return canvas;
 }

@@ -9,7 +9,8 @@ const nextConfig: NextConfig = {
       { protocol: "https", hostname: "images.unsplash.com" },
     ],
   },
-  // 增大 API 请求体限制（处理图片上传）
+  // 增大 API Route 请求体限制（处理图片上传，10MB）
+  // 注意：serverActions.bodySizeLimit 只管 Server Actions，API Route 用下面这个
   experimental: {
     serverActions: {
       bodySizeLimit: "10mb",
