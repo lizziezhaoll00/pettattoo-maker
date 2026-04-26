@@ -19,7 +19,7 @@ const STYLE_CONFIGS: {
   previewImg?: string; // hover 时展示的示例效果图
 }[] = [
   { key: "realistic",  label: "写实风", emoji: "📸", desc: "忠实还原主子颜值" },
-  { key: "lineart",    label: "线稿风", emoji: "✏️", desc: "极简黑白，纹身经典",
+  { key: "lineart",    label: "素描风", emoji: "✏️", desc: "排线细节，复古蚀刻感",
     previewImg: "https://images.unsplash.com/photo-1578662996442-48f60103fc96?w=300&q=80&sat=-100&con=50" },
   { key: "watercolor", label: "水彩风", emoji: "🎨", desc: "通透柔和，小红书款",
     previewImg: "https://images.unsplash.com/photo-1533738363-b7f9aef128ce?w=300&q=80" },
@@ -54,6 +54,7 @@ export default function EditorPage() {
   const [showDownloadModal, setShowDownloadModal] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [hoveredStyle, setHoveredStyle] = useState<StyleKey | null>(null);
+  const [stylizeToast, setStylizeToast] = useState<string | null>(null);
 
   // 没有图片时跳回首页
   useEffect(() => {
@@ -94,14 +95,18 @@ export default function EditorPage() {
     }
     setSelectedBase("art");
     setSelectedArtStyle(key as ArtStyle);
+    // 已在生成中，或已成功，则跳过；但如果之前失败过，允许重试
     if (stylizedUrls[key as ArtStyle] || isStylizing[key as ArtStyle] || !removedBgUrl) return;
     setIsStylizing(key as ArtStyle, true);
     setStylizeError(key as ArtStyle, null);
+    setStylizeToast("✨ AI 正在为你家主子生成专属风格，约需 15-30 秒…");
     try {
       const url = await stylize(removedBgUrl, key as ArtStyle);
       setStylizedUrl(key as ArtStyle, url);
+      setStylizeToast(null);
     } catch (e) {
       setStylizeError(key as ArtStyle, e instanceof Error ? e.message : "风格化失败");
+      setStylizeToast(null);
     } finally {
       setIsStylizing(key as ArtStyle, false);
     }
@@ -180,12 +185,13 @@ export default function EditorPage() {
                     <img
                       src={cardUrl}
                       alt={s.label}
-                      className="w-full h-full object-cover bg-[#f5f5f5]"
+                      className="w-full h-full object-cover bg-white"
                       style={s.key === "realistic" ? { filter: "brightness(1.1)" } : undefined}
                     />
                   ) : loading ? (
-                    <div className="w-full h-full flex items-center justify-center bg-gray-50">
-                      <span className="text-lg animate-bounce">⏳</span>
+                    <div className="w-full h-full flex flex-col items-center justify-center bg-gray-50 gap-1 px-1">
+                      <span className="text-base animate-spin">✨</span>
+                      <span className="text-[9px] text-amber-500 font-medium text-center leading-tight">AI 生成中</span>
                     </div>
                   ) : error ? (
                     <div className="w-full h-full flex items-center justify-center bg-red-50">
@@ -338,6 +344,13 @@ export default function EditorPage() {
           imageUrl={activeImageUrl}
           onClose={() => setShowDownloadModal(false)}
         />
+      )}
+
+      {/* AI 风格化进度 Toast */}
+      {stylizeToast && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 px-4 py-2.5 bg-gray-800/90 backdrop-blur-sm text-white text-xs rounded-full shadow-lg whitespace-nowrap animate-pulse">
+          {stylizeToast}
+        </div>
       )}
     </div>
   );
