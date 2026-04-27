@@ -2,108 +2,79 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useEditorStore, SIZE_CONFIG, SizeKey, ArtStyle } from "@/store/editorStore";
+import { useEditorStore, SIZE_CONFIG, SizeKey } from "@/store/editorStore";
 import { renderFinalCanvas } from "@/lib/canvas";
 import DownloadModal from "@/components/DownloadModal";
-import LoadingCat from "@/components/LoadingCat";
-import { stylize } from "@/lib/stylize";
-
-type StyleKey = "realistic" | ArtStyle;
-
-const STYLE_CONFIGS: {
-  key: StyleKey;
-  label: string;
-  emoji: string;
-  desc: string;
-  previewImg?: string;
-}[] = [
-  { key: "realistic",  label: "写实风", emoji: "📸", desc: "忠实还原主子颜值" },
-  { key: "lineart",    label: "素描风", emoji: "✏️", desc: "排线细节，复古蚀刻感",
-    previewImg: "https://images.unsplash.com/photo-1578662996442-48f60103fc96?w=300&q=80&sat=-100&con=50" },
-  { key: "watercolor", label: "水彩风", emoji: "🎨", desc: "通透柔和，小红书款",
-    previewImg: "https://images.unsplash.com/photo-1533738363-b7f9aef128ce?w=300&q=80" },
-  { key: "cartoon",    label: "漫画风", emoji: "🐱", desc: "萌感十足，卡通主子",
-    previewImg: "https://images.unsplash.com/photo-1514888286974-6c03e2ca1dba?w=300&q=80" },
-];
 
 export default function EditorPage() {
   const router = useRouter();
   const {
-    originalUrl, removedBgUrl, isRemoving, removeError,
-    selectedBase, selectedArtStyle, stylizedUrls, isStylizing, stylizeErrors,
-    colorMode, showWhiteBorder, selectedSize,
-    setSelectedBase, setSelectedArtStyle, setColorMode, setShowWhiteBorder, setSelectedSize,
-    setStylizedUrl, setIsStylizing, setStylizeError,
+    originalUrl,
+    removedBgUrl,
+    tattooSchemes,
+    selectedSchemeId,
+    schemeResults,
+    colorMode,
+    showWhiteBorder,
+    selectedSize,
+    setColorMode,
+    setShowWhiteBorder,
+    setSelectedSize,
   } = useEditorStore();
 
   const [showDownloadModal, setShowDownloadModal] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [hoveredStyle, setHoveredStyle] = useState<StyleKey | null>(null);
-  const [stylizeToast, setStylizeToast] = useState<string | null>(null);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
 
-  useEffect(() => {
-    if (!originalUrl && !isRemoving) router.replace("/");
-  }, [originalUrl, isRemoving, router]);
+  // 找到当前选中方案
+  const selectedScheme = tattooSchemes.find((s) => s.id === selectedSchemeId) ?? null;
+  const schemeResult = selectedSchemeId ? schemeResults[selectedSchemeId] : null;
 
+  // 优先用方案生成图，否则用写实抠图
   const activeImageUrl =
-    selectedBase === "realistic"
-      ? removedBgUrl
-      : stylizedUrls[selectedArtStyle] || null;
+    schemeResult?.state === "done" && schemeResult.url
+      ? schemeResult.url
+      : removedBgUrl;
 
+  // 没有图片时跳回首页
+  useEffect(() => {
+    if (!originalUrl) router.replace("/");
+  }, [originalUrl, router]);
+
+  // 更新预览（白边/黑白走 Canvas，否则直接用图）
   useEffect(() => {
     if (!activeImageUrl) { setPreviewUrl(null); return; }
     const needsCanvas = showWhiteBorder || colorMode === "bw";
     if (!needsCanvas) { setPreviewUrl(activeImageUrl); return; }
     let cancelled = false;
-    renderFinalCanvas({ imageUrl: activeImageUrl, size: selectedSize, colorMode, showWhiteBorder, mirror: false, isRealistic: selectedBase === "realistic" })
+    renderFinalCanvas({
+      imageUrl: activeImageUrl,
+      size: selectedSize,
+      colorMode,
+      showWhiteBorder,
+      mirror: false,
+      isRealistic: !selectedScheme,
+    })
       .then((canvas) => { if (!cancelled) setPreviewUrl(canvas.toDataURL("image/png")); })
       .catch(console.error);
     return () => { cancelled = true; };
-  }, [activeImageUrl, selectedSize, colorMode, showWhiteBorder, selectedBase]);
-
-  const handleSelectStyle = async (key: StyleKey) => {
-    if (key === "realistic") { setSelectedBase("realistic"); return; }
-    setSelectedBase("art");
-    setSelectedArtStyle(key as ArtStyle);
-    if (stylizedUrls[key as ArtStyle] || isStylizing[key as ArtStyle] || !removedBgUrl) return;
-    setIsStylizing(key as ArtStyle, true);
-    setStylizeError(key as ArtStyle, null);
-    setStylizeToast("✨ AI 正在为你家主子生成专属风格，约需 15-30 秒…");
-    try {
-      const url = await stylize(removedBgUrl, key as ArtStyle);
-      setStylizedUrl(key as ArtStyle, url);
-      setStylizeToast(null);
-    } catch (e) {
-      setStylizeError(key as ArtStyle, e instanceof Error ? e.message : "风格化失败");
-      setStylizeToast(null);
-    } finally {
-      setIsStylizing(key as ArtStyle, false);
-    }
-  };
-
-  const activeKey: StyleKey = selectedBase === "realistic" ? "realistic" : selectedArtStyle;
-
-  const getCardUrl = (key: StyleKey): string | null => {
-    if (key === "realistic") return removedBgUrl;
-    return stylizedUrls[key as ArtStyle] || null;
-  };
-
-  if (!originalUrl && isRemoving) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-amber-50">
-        <LoadingCat text="🐾 正在勾勒毛孩子的灵魂轮廓，稍等一下下" />
-      </div>
-    );
-  }
+  }, [activeImageUrl, selectedSize, colorMode, showWhiteBorder, selectedScheme]);
 
   return (
     <div className="min-h-screen bg-gray-50">
+      {/* 顶部导航 */}
       <div className="bg-white border-b border-gray-100 px-4 py-3 flex items-center justify-between sticky top-0 z-10">
-        <button onClick={() => setShowResetConfirm(true)} className="text-gray-500 hover:text-gray-800 text-sm flex items-center gap-1">
-          ← 重新上传
+        <button
+          onClick={() => setShowResetConfirm(true)}
+          className="text-gray-500 hover:text-gray-800 text-sm flex items-center gap-1"
+        >
+          ← 返回方案
         </button>
-        <span className="text-sm font-semibold text-gray-700">🐾 纹身贴编辑器</span>
+        <span className="text-sm font-semibold text-gray-700">
+          {selectedScheme
+            ? `${selectedScheme.styleEmoji} ${selectedScheme.title}`
+            : "🐾 纹身贴编辑器"}
+        </span>
         <button
           onClick={() => setShowDownloadModal(true)}
           disabled={!activeImageUrl}
@@ -115,104 +86,88 @@ export default function EditorPage() {
 
       <div className="max-w-lg mx-auto px-4 py-6 flex flex-col gap-6">
 
-        {/* Step 1: 选择风格 */}
-        <section>
-          <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Step 1 · 选择风格</h2>
-          <div className="grid grid-cols-4 gap-2">
-            {STYLE_CONFIGS.map((s) => {
-              const isActive = activeKey === s.key;
-              const cardUrl = getCardUrl(s.key);
-              const loading = s.key !== "realistic" && isStylizing[s.key as ArtStyle];
-              const error = s.key !== "realistic" && stylizeErrors[s.key as ArtStyle];
-              const isHovered = hoveredStyle === s.key;
-              const showSampleOverlay = isHovered && !!s.previewImg && !cardUrl && !loading;
-
-              return (
-                <button
-                  key={s.key}
-                  onClick={() => handleSelectStyle(s.key)}
-                  onMouseEnter={() => setHoveredStyle(s.key)}
-                  onMouseLeave={() => setHoveredStyle(null)}
-                  onTouchStart={() => setHoveredStyle(s.key)}
-                  onTouchEnd={() => setHoveredStyle(null)}
-                  className={`relative rounded-2xl border-2 overflow-hidden aspect-square transition-all ${isActive ? "border-amber-400 ring-2 ring-amber-200" : "border-gray-200 hover:border-amber-300"}`}
-                >
-                  {cardUrl ? (
-                    <img src={cardUrl} alt={s.label} className="w-full h-full object-cover bg-white" style={s.key === "realistic" ? { filter: "brightness(1.1)" } : undefined} />
-                  ) : loading ? (
-                    <div className="w-full h-full flex flex-col items-center justify-center bg-gray-50 gap-1 px-1">
-                      <span className="text-base animate-spin">✨</span>
-                      <span className="text-[9px] text-amber-500 font-medium text-center leading-tight">AI 生成中</span>
-                    </div>
-                  ) : error ? (
-                    <div className="w-full h-full flex flex-col items-center justify-center bg-red-50 gap-1 px-1">
-                      <span className="text-[9px] text-red-400 text-center leading-tight">失败</span>
-                      <span className="text-[8px] text-red-300 underline">点击重试</span>
-                    </div>
-                  ) : s.key === "realistic" && isRemoving ? (
-                    <div className="w-full h-full flex items-center justify-center bg-gray-50">
-                      <span className="text-lg animate-bounce">⏳</span>
-                    </div>
-                  ) : (
-                    <div className={`w-full h-full flex flex-col items-center justify-center gap-1 px-1.5 ${isActive ? "bg-amber-50" : "bg-white"}`}>
-                      <span className="text-2xl">{s.emoji}</span>
-                      <span className={`text-[11px] font-semibold leading-tight text-center ${isActive ? "text-amber-700" : "text-gray-700"}`}>{s.label}</span>
-                      <span className="text-[9px] text-gray-400 leading-tight text-center">{s.desc}</span>
-                    </div>
-                  )}
-
-                  {s.previewImg && (
-                    <div className={`absolute inset-0 transition-opacity duration-200 ${showSampleOverlay ? "opacity-100" : "opacity-0 pointer-events-none"}`}>
-                      <img src={s.previewImg} alt={`${s.label}示例`} className="w-full h-full object-cover" />
-                      <div className="absolute inset-0 bg-black/20" />
-                      <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent py-1.5 px-1">
-                        <span className="text-white text-[9px] font-semibold">效果示例</span>
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="absolute bottom-0 left-0 right-0 bg-white/85 backdrop-blur-sm py-1 text-center">
-                    <span className={`text-[10px] font-semibold ${isActive ? "text-amber-600" : "text-gray-600"}`}>{s.label}</span>
-                  </div>
-                  {isActive && (
-                    <div className="absolute top-1.5 right-1.5 w-4 h-4 bg-amber-400 rounded-full flex items-center justify-center text-white text-[10px] shadow z-10">✓</div>
-                  )}
-                </button>
-              );
-            })}
+        {/* 方案信息提示 */}
+        {selectedScheme && (
+          <div className="bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3 flex items-center gap-3">
+            <span className="text-2xl">{selectedScheme.styleEmoji}</span>
+            <div>
+              <p className="text-sm font-semibold text-amber-800">{selectedScheme.title}</p>
+              <p className="text-xs text-amber-600">{selectedScheme.poseDesc} · 推荐贴于 {selectedScheme.bodyPart}</p>
+            </div>
+            <button
+              onClick={() => router.push("/schemes")}
+              className="ml-auto text-xs text-amber-600 hover:text-amber-800 underline flex-shrink-0"
+            >
+              换方案
+            </button>
           </div>
-        </section>
+        )}
 
-        {/* Step 2: 精细调节 */}
+        {/* 精细调节 */}
         <section>
-          <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Step 2 · 精细调节</h2>
+          <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">
+            精细调节
+          </h2>
           <div className="bg-white rounded-2xl border border-gray-100 divide-y divide-gray-50">
+            {/* 白边描边 */}
             <div className="flex items-center justify-between px-4 py-3">
               <div>
                 <p className="text-sm font-medium text-gray-700">白边描边</p>
                 <p className="text-xs text-gray-400">外廓白边，方便裁剪 · 深色背景更明显</p>
               </div>
-              <button type="button" onClick={() => setShowWhiteBorder(!showWhiteBorder)}
-                className={`relative w-12 h-7 rounded-full transition-colors duration-200 focus:outline-none ${showWhiteBorder ? "bg-amber-400" : "bg-gray-300"}`}>
-                <span className={`absolute top-1 left-1 w-5 h-5 bg-white rounded-full shadow-md transition-transform duration-200 ${showWhiteBorder ? "translate-x-5" : "translate-x-0"}`} />
+              <button
+                type="button"
+                onClick={() => setShowWhiteBorder(!showWhiteBorder)}
+                className={`relative w-12 h-7 rounded-full transition-colors duration-200 focus:outline-none ${
+                  showWhiteBorder ? "bg-amber-400" : "bg-gray-300"
+                }`}
+              >
+                <span className={`absolute top-1 left-1 w-5 h-5 bg-white rounded-full shadow-md transition-transform duration-200 ${
+                  showWhiteBorder ? "translate-x-5" : "translate-x-0"
+                }`} />
               </button>
             </div>
+
+            {/* 黑白模式 */}
             <div className="flex items-center justify-between px-4 py-3">
               <div>
                 <p className="text-sm font-medium text-gray-700">黑白模式</p>
                 <p className="text-xs text-gray-400">高对比度黑白，适合单色纹身贴</p>
               </div>
-              <button type="button" onClick={() => setColorMode(colorMode === "bw" ? "color" : "bw")}
-                className={`relative w-12 h-7 rounded-full transition-colors duration-200 focus:outline-none ${colorMode === "bw" ? "bg-gray-600" : "bg-gray-300"}`}>
-                <span className={`absolute top-1 left-1 w-5 h-5 bg-white rounded-full shadow-md transition-transform duration-200 ${colorMode === "bw" ? "translate-x-5" : "translate-x-0"}`} />
+              <button
+                type="button"
+                onClick={() => setColorMode(colorMode === "bw" ? "color" : "bw")}
+                className={`relative w-12 h-7 rounded-full transition-colors duration-200 focus:outline-none ${
+                  colorMode === "bw" ? "bg-gray-600" : "bg-gray-300"
+                }`}
+              >
+                <span className={`absolute top-1 left-1 w-5 h-5 bg-white rounded-full shadow-md transition-transform duration-200 ${
+                  colorMode === "bw" ? "translate-x-5" : "translate-x-0"
+                }`} />
               </button>
             </div>
+
+            {/* 打印尺寸 */}
             <div className="px-4 py-3">
-              <p className="text-sm font-medium text-gray-700 mb-2">打印尺寸</p>
+              <p className="text-sm font-medium text-gray-700 mb-2">
+                打印尺寸
+                {selectedScheme && (
+                  <span className="ml-2 text-xs text-amber-500 font-normal">
+                    推荐 {selectedScheme.size}（{selectedScheme.bodyPart}）
+                  </span>
+                )}
+              </p>
               <div className="flex gap-2">
                 {(Object.keys(SIZE_CONFIG) as SizeKey[]).map((key) => (
-                  <button key={key} onClick={() => setSelectedSize(key)}
-                    className={`flex-1 py-2 rounded-xl border text-xs font-medium transition-all ${selectedSize === key ? "border-amber-400 bg-amber-50 text-amber-700" : "border-gray-200 text-gray-600 hover:border-amber-300"}`}>
+                  <button
+                    key={key}
+                    onClick={() => setSelectedSize(key)}
+                    className={`flex-1 py-2 rounded-xl border text-xs font-medium transition-all ${
+                      selectedSize === key
+                        ? "border-amber-400 bg-amber-50 text-amber-700"
+                        : "border-gray-200 text-gray-600 hover:border-amber-300"
+                    } ${selectedScheme?.size === key ? "ring-1 ring-amber-300" : ""}`}
+                  >
                     <div className="font-bold">{key}</div>
                     <div>{SIZE_CONFIG[key].cm}cm</div>
                     <div className="text-gray-400 text-[10px]">{SIZE_CONFIG[key].desc}</div>
@@ -223,21 +178,42 @@ export default function EditorPage() {
           </div>
         </section>
 
+        {/* 预览 */}
         {previewUrl && (
           <section>
-            <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">预览效果</h2>
-            <div className="rounded-2xl border border-gray-100 p-4 flex items-center justify-center min-h-48"
-              style={{ backgroundImage: "linear-gradient(45deg,#e5e5e5 25%,transparent 25%),linear-gradient(-45deg,#e5e5e5 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#e5e5e5 75%),linear-gradient(-45deg,transparent 75%,#e5e5e5 75%)", backgroundSize: "16px 16px", backgroundPosition: "0 0,0 8px,8px -8px,-8px 0", backgroundColor: "#f5f5f5" }}>
+            <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">
+              预览效果
+            </h2>
+            <div
+              className="rounded-2xl border border-gray-100 p-4 flex items-center justify-center min-h-48"
+              style={{
+                backgroundImage:
+                  "linear-gradient(45deg,#e5e5e5 25%,transparent 25%),linear-gradient(-45deg,#e5e5e5 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#e5e5e5 75%),linear-gradient(-45deg,transparent 75%,#e5e5e5 75%)",
+                backgroundSize: "16px 16px",
+                backgroundPosition: "0 0,0 8px,8px -8px,-8px 0",
+                backgroundColor: "#f5f5f5",
+              }}
+            >
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={previewUrl} alt="预览" className="max-h-96 max-w-full object-contain"
-                style={{ imageRendering: "auto", filter: (selectedBase === "realistic" && !showWhiteBorder && colorMode !== "bw") ? "brightness(1.1)" : undefined }} />
+              <img
+                src={previewUrl}
+                alt="预览"
+                className="max-h-96 max-w-full object-contain"
+                style={{ imageRendering: "auto" }}
+              />
             </div>
-            <p className="text-xs text-gray-400 text-center mt-2">预览为正常方向，导出时自动镜像翻转 🔄</p>
+            <p className="text-xs text-gray-400 text-center mt-2">
+              预览为正常方向，导出时自动镜像翻转 🔄
+            </p>
           </section>
         )}
 
-        <button onClick={() => setShowDownloadModal(true)} disabled={!activeImageUrl}
-          className="w-full py-4 bg-amber-400 hover:bg-amber-500 text-white font-bold rounded-2xl text-base disabled:opacity-40 transition-colors shadow-md">
+        {/* 下载按钮 */}
+        <button
+          onClick={() => setShowDownloadModal(true)}
+          disabled={!activeImageUrl}
+          className="w-full py-4 bg-amber-400 hover:bg-amber-500 text-white font-bold rounded-2xl text-base disabled:opacity-40 transition-colors shadow-md"
+        >
           🐾 下载纹身贴素材
         </button>
       </div>
@@ -246,26 +222,33 @@ export default function EditorPage() {
         <DownloadModal imageUrl={activeImageUrl} onClose={() => setShowDownloadModal(false)} />
       )}
 
+      {/* 返回方案确认弹窗 */}
       {showResetConfirm && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
-          onClick={(e) => e.target === e.currentTarget && setShowResetConfirm(false)}>
+        <div
+          className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
+          onClick={(e) => e.target === e.currentTarget && setShowResetConfirm(false)}
+        >
           <div className="bg-white rounded-3xl w-full max-w-xs p-6 shadow-2xl">
             <div className="text-center mb-5">
               <div className="text-4xl mb-3">🔄</div>
-              <h3 className="text-base font-bold text-gray-800">重新上传？</h3>
-              <p className="text-xs text-gray-500 mt-1.5">当前所有生成结果将会清除，确定要重新开始吗？</p>
+              <h3 className="text-base font-bold text-gray-800">返回方案选择？</h3>
+              <p className="text-xs text-gray-500 mt-1.5">当前调整不会丢失，随时可以再来</p>
             </div>
             <div className="flex gap-3">
-              <button onClick={() => setShowResetConfirm(false)} className="flex-1 py-2.5 rounded-2xl border border-gray-200 text-gray-600 text-sm font-medium hover:bg-gray-50 transition-colors">再想想</button>
-              <button onClick={() => { setShowResetConfirm(false); router.push("/"); }} className="flex-1 py-2.5 rounded-2xl bg-amber-400 hover:bg-amber-500 text-white text-sm font-bold transition-colors">确认重新上传</button>
+              <button
+                onClick={() => setShowResetConfirm(false)}
+                className="flex-1 py-2.5 rounded-2xl border border-gray-200 text-gray-600 text-sm font-medium hover:bg-gray-50 transition-colors"
+              >
+                继续编辑
+              </button>
+              <button
+                onClick={() => { setShowResetConfirm(false); router.push("/schemes"); }}
+                className="flex-1 py-2.5 rounded-2xl bg-amber-400 hover:bg-amber-500 text-white text-sm font-bold transition-colors"
+              >
+                返回方案
+              </button>
             </div>
           </div>
-        </div>
-      )}
-
-      {stylizeToast && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 px-4 py-2.5 bg-gray-800/90 backdrop-blur-sm text-white text-xs rounded-full shadow-lg whitespace-nowrap animate-pulse">
-          {stylizeToast}
         </div>
       )}
     </div>

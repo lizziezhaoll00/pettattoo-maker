@@ -3,11 +3,15 @@ import { NextRequest, NextResponse } from "next/server";
 
 export const maxDuration = 30;
 
-export interface CropSuggestion {
+/** 6 种纹身方案，每种都有独立的生成 prompt */
+export interface TattooScheme {
   id: string;
   title: string;
-  desc: string;
-  cropHint: string;
+  styleEmoji: string;
+  poseDesc: string;  // 一句话描述姿态/场景
+  bodyPart: string;  // 推荐贴的位置
+  size: "S" | "M" | "L";
+  tattooPrompt: string; // 传给 Seedream 的生成提示词
 }
 
 function httpsPost(
@@ -40,46 +44,32 @@ function httpsPost(
   });
 }
 
-const SYSTEM_PROMPT = `你是一位专业的宠物纹身贴构图顾问。用户会上传一张宠物照片，你需要分析这张照片，针对"制作纹身贴"的使用场景，给出 2-3 种最适合的抠图方案建议。
+const SYSTEM_PROMPT = `你是一位专业的宠物纹身贴设计师。用户会上传一张宠物照片，你需要分析这张照片，为这只宠物量身设计 6 种不同风格的纹身贴方案。
 
 每种方案必须包含：
-- id: 英文简写标识（如 full_body / face_close / partial_scene）
-- title: 2-6字中文标题（如"完整身形"）
-- desc: 一句话用户说明（20字以内，说清楚抠什么、效果如何）
-- cropHint: 传给抠图模型的英文提示词（描述要保留哪些区域/元素，供分割模型参考）
+- id: 英文简写（如 lineart_fullbody / watercolor_face / cartoon_sitting 等，确保 6 个 id 各不相同）
+- title: 2-6字中文标题（如"极简线稿"、"水彩写意"）
+- styleEmoji: 1个最符合风格的 emoji
+- poseDesc: 一句话描述（10-20字，说清楚构图和风格特点）
+- bodyPart: 推荐贴的位置（如"手腕"、"锁骨"、"脚踝"）
+- size: 推荐尺寸，只能是 "S"、"M" 或 "L" 其中之一
+- tattooPrompt: 传给图像生成模型的英文 prompt，用于生成该风格的纹身贴图（详细说明风格、构图、颜色处理、透明背景等）
 
-分析维度：
-1. 照片中宠物的数量（单只还是多只）——注意：镜像、水面倒影、阴影等情况可能让同一只宠物看起来有多个，此时仍应视为1只
-2. 宠物的姿态（侧卧/坐姿/趴着/站立等）
-3. 有无标志性道具/装饰（项圈、帽子、玩具等）
-4. 背景是否有可以保留的有趣元素
-5. 脸部特写是否清晰有表情
-6. 纹身贴尺寸通常 3-8cm，构图需简洁
+6 种方案必须覆盖以下维度的多样性：
+1. 风格多样：至少包含线稿(lineart)、水彩(watercolor)、卡通(cartoon)、写实(realistic)等不同风格
+2. 构图多样：全身、半身、大头特写、局部场景等不同取景
+3. 尺寸分布：S/M/L 各有分布，不要全是同一尺寸
 
-常见方案类型参考（根据实际照片选择最合适的2-3个，不要照抄）：
-- 完整全身：保留四肢+尾巴，适合姿态完整的照片
-- 大脸特写：只抠头部+颈部，表情丰富时效果好
-- 半身坐姿：上半身+爪子，构图简洁可爱
-- 带道具：包含帽子/项圈等装饰，个性十足
-- 局部场景：保留部分背景元素（如窗台、树叶）增加故事感
-- 镜像组合：照片中有镜子/玻璃/水面倒影时，可保留宠物本体+镜中倒影，构图趣味十足
-
-⚠️ 镜像/倒影场景特别规则：
-- cropHint 中必须包含 "mirror reflection" 或 "glass reflection" 关键词，明确告知抠图模型需要保留倒影区域
-- 正确示例："Precise silhouette of the cat and its mirror reflection, both bodies, clean fur edges, transparent background"
-- 错误示例：只写 "cat full body"（会导致倒影被裁掉）
-
-在 cropHint 中，请遵守以下规则：
-1. 必须包含宠物的具体种类名词（如 dog、cat、rabbit），不能只写部位（如只写 head 或 fur）
-2. 必须描述要保留的完整区域范围，不要只描述局部
-3. 强调边缘质量，例如 "Precise silhouette of the dog's face and upper body, clean curly fur edges, transparent background"
-4. 结尾始终加 "transparent background"
-5. 错误示例："cat's head, clear fur edges"（缺少整体范围、物种写了但范围太窄不稳定）
-6. 正确示例："Precise silhouette of the entire dog body, fluffy curly fur edges, transparent background"
+tattooPrompt 写作规范：
+- 必须以 "Tattoo sticker design of [宠物种类]:" 开头
+- 描述具体的宠物姿态/构图
+- 描述清晰的艺术风格（线稿/水彩/卡通等）
+- 末尾固定加 "transparent background, no text, no watermark, clean edges"
+- 示例："Tattoo sticker design of a corgi dog: full body sitting pose, minimalist black lineart style, thin elegant strokes, transparent background, no text, no watermark, clean edges"
 
 请严格返回 JSON 数组格式，不要有任何额外文字：
 [
-  { "id": "...", "title": "...", "desc": "...", "cropHint": "..." },
+  { "id": "...", "title": "...", "styleEmoji": "...", "poseDesc": "...", "bodyPart": "...", "size": "M", "tattooPrompt": "..." },
   ...
 ]`;
 
@@ -104,7 +94,7 @@ export async function POST(req: NextRequest) {
           role: "user",
           content: [
             { type: "input_image", image_url: imageDataUrl },
-            { type: "input_text", text: "请分析这张宠物照片，给出最适合制作纹身贴的 2-3 种抠图方案。" },
+            { type: "input_text", text: "请分析这张宠物照片，为它量身定制 6 种纹身贴方案。" },
           ],
         },
       ],
@@ -118,7 +108,7 @@ export async function POST(req: NextRequest) {
 
     if (status !== 200) {
       console.error("[analyze-crop] API error:", status, rawData.slice(0, 300));
-      return NextResponse.json({ suggestions: getDefaultSuggestions() });
+      return NextResponse.json({ schemes: getDefaultSchemes() });
     }
 
     const result = JSON.parse(rawData);
@@ -126,51 +116,91 @@ export async function POST(req: NextRequest) {
     const msgOutput = (result.output as ResponseOutput[])?.find((o) => o.type === "message");
     const content = msgOutput?.content?.find((c) => c.type === "output_text")?.text ?? "";
 
-    let suggestions: CropSuggestion[] = [];
+    let schemes: TattooScheme[] = [];
     const jsonMatch = content.match(/\[[\s\S]*\]/);
     if (jsonMatch) {
-      try { suggestions = JSON.parse(jsonMatch[0]); } catch {
+      try { schemes = JSON.parse(jsonMatch[0]); } catch {
         console.error("[analyze-crop] JSON parse failed:", jsonMatch[0]);
       }
     }
 
-    if (!suggestions || suggestions.length === 0) {
-      suggestions = getDefaultSuggestions();
+    if (!schemes || schemes.length < 3) {
+      schemes = getDefaultSchemes();
     }
 
-    suggestions = suggestions.slice(0, 3).map((s, i) => ({
-      id: s.id || `option_${i}`,
-      title: s.title || "完整抠图",
-      desc: s.desc || "保留宠物全身，去除背景",
-      cropHint: s.cropHint || "full body of pet, remove background completely",
+    // 取最多 6 个，补全必填字段
+    schemes = schemes.slice(0, 6).map((s, i) => ({
+      id: s.id || `scheme_${i}`,
+      title: s.title || "纹身方案",
+      styleEmoji: s.styleEmoji || "🎨",
+      poseDesc: s.poseDesc || "经典构图",
+      bodyPart: s.bodyPart || "手腕",
+      size: (["S", "M", "L"].includes(s.size) ? s.size : "M") as "S" | "M" | "L",
+      tattooPrompt: s.tattooPrompt || `Tattoo sticker design of a pet, scheme ${i + 1}, transparent background, no text, no watermark, clean edges`,
     }));
 
-    return NextResponse.json({ suggestions });
+    return NextResponse.json({ schemes });
   } catch (error) {
     console.error("[analyze-crop]", error);
-    return NextResponse.json({ suggestions: getDefaultSuggestions() });
+    return NextResponse.json({ schemes: getDefaultSchemes() });
   }
 }
 
-function getDefaultSuggestions(): CropSuggestion[] {
+export function getDefaultSchemes(): TattooScheme[] {
   return [
     {
-      id: "full_body",
-      title: "完整全身",
-      desc: "保留四肢尾巴，构图完整自然",
-      cropHint: "Precise silhouette of the entire pet body including all four legs and tail, clean fur edges, transparent background",
+      id: "lineart_fullbody",
+      title: "极简线稿",
+      styleEmoji: "✏️",
+      poseDesc: "全身线稿，干净极简",
+      bodyPart: "手腕",
+      size: "M",
+      tattooPrompt: "Tattoo sticker design of a pet: full body pose, minimalist black lineart style, thin elegant strokes, simple outline, transparent background, no text, no watermark, clean edges",
     },
     {
-      id: "face_close",
-      title: "大脸特写",
-      desc: "只保留头部，表情丰富更萌",
-      cropHint: "Precise silhouette of the pet's face and head, detailed ear and whisker edges, portrait crop, transparent background",
+      id: "watercolor_face",
+      title: "水彩大脸",
+      styleEmoji: "🎨",
+      poseDesc: "头部大特写，水彩晕染",
+      bodyPart: "锁骨",
+      size: "M",
+      tattooPrompt: "Tattoo sticker design of a pet: close-up face portrait, soft watercolor style, gentle color blending, pastel tones, transparent background, no text, no watermark, clean edges",
     },
     {
-      id: "half_body",
-      title: "半身坐姿",
-      desc: "上半身+前爪，简洁可爱",
-      cropHint: "Precise silhouette of the pet's upper body and front paws, clean fur texture edges, sitting pose, transparent background",
+      id: "cartoon_sitting",
+      title: "卡通坐姿",
+      styleEmoji: "🐾",
+      poseDesc: "卡通风坐姿，圆润可爱",
+      bodyPart: "脚踝",
+      size: "S",
+      tattooPrompt: "Tattoo sticker design of a pet: cute sitting pose, cartoon chibi style, bold outlines, bright cheerful colors, kawaii aesthetic, transparent background, no text, no watermark, clean edges",
+    },
+    {
+      id: "sketch_halfbody",
+      title: "素描半身",
+      styleEmoji: "🖊️",
+      poseDesc: "上半身素描，细节精准",
+      bodyPart: "小臂",
+      size: "L",
+      tattooPrompt: "Tattoo sticker design of a pet: upper body half portrait, detailed pencil sketch style, fine cross-hatching shading, realistic proportions, transparent background, no text, no watermark, clean edges",
+    },
+    {
+      id: "geometric_minimal",
+      title: "几何简约",
+      styleEmoji: "🔺",
+      poseDesc: "几何多边形风，时尚前卫",
+      bodyPart: "耳后",
+      size: "S",
+      tattooPrompt: "Tattoo sticker design of a pet: geometric low-poly style, angular triangular shapes, modern minimal design, flat colors with geometric facets, transparent background, no text, no watermark, clean edges",
+    },
+    {
+      id: "realistic_color",
+      title: "写实彩色",
+      styleEmoji: "🌈",
+      poseDesc: "写实全彩，色彩鲜艳",
+      bodyPart: "肩膀",
+      size: "L",
+      tattooPrompt: "Tattoo sticker design of a pet: full body realistic portrait, vibrant full color illustration, detailed fur texture, professional photo-realistic style, transparent background, no text, no watermark, clean edges",
     },
   ];
 }
