@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import type { CropSuggestion } from "@/app/api/analyze-crop/route";
 
 export type ArtStyle = "lineart" | "watercolor" | "cartoon";
 export type ColorMode = "color" | "bw";
@@ -15,6 +16,12 @@ interface EditorState {
   originalFile: File | null;
   originalUrl: string | null;
 
+  // 抠图方案分析
+  cropSuggestions: CropSuggestion[];
+  isAnalyzing: boolean;
+  analyzeError: string | null;
+  selectedCropId: string | null;
+
   // 抠图结果
   removedBgUrl: string | null;
   isRemoving: boolean;
@@ -26,7 +33,7 @@ interface EditorState {
   stylizeErrors: Partial<Record<ArtStyle, string>>;
 
   // 用户选择
-  selectedBase: "realistic" | "art"; // 写实 or 艺术
+  selectedBase: "realistic" | "art";
   selectedArtStyle: ArtStyle;
   colorMode: ColorMode;
   showWhiteBorder: boolean;
@@ -34,6 +41,10 @@ interface EditorState {
 
   // Actions
   setOriginalFile: (file: File, url: string) => void;
+  setCropSuggestions: (suggestions: CropSuggestion[]) => void;
+  setIsAnalyzing: (v: boolean) => void;
+  setAnalyzeError: (e: string | null) => void;
+  setSelectedCropId: (id: string) => void;
   setRemovedBgUrl: (url: string) => void;
   setIsRemoving: (v: boolean) => void;
   setRemoveError: (e: string | null) => void;
@@ -51,6 +62,10 @@ interface EditorState {
 const initialState = {
   originalFile: null,
   originalUrl: null,
+  cropSuggestions: [],
+  isAnalyzing: false,
+  analyzeError: null,
+  selectedCropId: null,
   removedBgUrl: null,
   isRemoving: false,
   removeError: null,
@@ -68,6 +83,10 @@ export const useEditorStore = create<EditorState>((set) => ({
   ...initialState,
 
   setOriginalFile: (file, url) => set({ originalFile: file, originalUrl: url }),
+  setCropSuggestions: (suggestions) => set({ cropSuggestions: suggestions }),
+  setIsAnalyzing: (v) => set({ isAnalyzing: v }),
+  setAnalyzeError: (e) => set({ analyzeError: e }),
+  setSelectedCropId: (id) => set({ selectedCropId: id }),
   setRemovedBgUrl: (url) => set({ removedBgUrl: url }),
   setIsRemoving: (v) => set({ isRemoving: v }),
   setRemoveError: (e) => set({ removeError: e }),
