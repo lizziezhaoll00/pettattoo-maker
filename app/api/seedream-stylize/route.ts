@@ -6,10 +6,12 @@ import { NextRequest, NextResponse } from "next/server";
 
 export const maxDuration = 60;
 
-type ArtStyle = "lineart" | "watercolor" | "cartoon" | "kawaii";
+type ArtStyle = "lineart" | "watercolor" | "cartoon" | "kawaii" | "outline";
 
 // 各风格对应的 Seedream prompt
 const STYLE_PROMPTS: Record<ArtStyle, string> = {
+  outline:
+    "将图中的宠物转化为极简单线轮廓纹身设计（Fine Line Outline style）。【线条规则】全图只使用均匀细线，严禁出现粗细变化、排线填充或阴影色块；线条流畅连贯，呈现「手绘一笔画」的轻盈感。【留白原则】宠物身体内部保持大面积纯白留白，仅用最少的线条勾勒外轮廓和关键体块转折（耳廓、腿部分叉、尾巴收尾），省略所有毛发纹理。【五官】适度保留：眼睛用小实心点或细弧线表达，保留清澈的「眼神光」高光点；鼻子用极小三角或短弧线，整体五官极简但有神。【装饰】可选加入 1-2 个与宠物气质相符的极简装饰元素（如细线爱心、小星星、短虚线、小花朵轮廓），装饰元素必须与宠物轮廓保持呼应，同样使用匀细单线，不喧宾夺主。【整体】构图干净，纯白背景，四周留足白边，呈现极简现代的线条插画审美，适合纹身转印。务必精准还原原图中宠物的整体姿态轮廓与标志性体态特征（耳朵形状、尾巴走势等）。",
   lineart:
     "将图中的宠物转化为专业转印就绪的细线纹身手稿。采用明确且富有粗细变化的墨黑线条，利用开阔的平行排线和细腻的点刺（stippling）表现毛发体积感，严禁使用密集的交叉网格排线。构图极简，重点刻画眼睛和鼻头的结构以还原神态。纯白背景隔离，具有高级的复古科学插画与矢量线条质感。高对比度黑墨艺术，高级纹身手稿审美。务必精准还原原图中宠物的面部比例与俏皮神态，尤其是双眼中清澈明亮的\"眼神光\"和五官细节。",
   watercolor:
@@ -191,6 +193,7 @@ export async function POST(req: NextRequest) {
       watercolor: "watercolor-refs",
       cartoon: "cartoon-refs",
       kawaii: "kawaii-refs",
+      outline: "outline-refs",
     };
 
     let styleRefBase64s: string[] = [];

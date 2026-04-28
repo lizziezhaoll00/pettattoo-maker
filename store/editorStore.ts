@@ -18,7 +18,7 @@ export interface SchemeResult {
   error?: string;
 }
 
-export type ArtStyle = "lineart" | "watercolor" | "cartoon" | "kawaii";
+export type ArtStyle = "lineart" | "watercolor" | "cartoon" | "kawaii" | "outline";
 export type ColorMode = "color" | "bw";
 export type SizeKey = "S" | "M" | "L";
 
@@ -101,7 +101,7 @@ interface EditorState {
   reset: () => void;
 }
 
-const ART_STYLES: ArtStyle[] = ["lineart", "watercolor", "cartoon", "kawaii"];
+const ART_STYLES: ArtStyle[] = ["lineart", "watercolor", "cartoon", "kawaii", "outline"];
 
 const initialState = {
   originalFile: null,

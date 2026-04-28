@@ -23,7 +23,7 @@ interface CropSuggestion {
 // ─── 类型 ────────────────────────────────────────────────────────────────────
 
 type RembgModel = "birefnet" | "rembg" | "removebg" | "langsam";
-type ArtStyle = "lineart" | "watercolor" | "cartoon" | "kawaii";
+type ArtStyle = "lineart" | "watercolor" | "cartoon" | "kawaii" | "outline";
 type StepState = "idle" | "loading" | "done" | "error";
 
 interface StyleResult {
@@ -58,6 +58,7 @@ const STYLES: { key: ArtStyle; emoji: string; label: string }[] = [
   { key: "lineart",   emoji: "✏️", label: "线稿" },
   { key: "watercolor",emoji: "🎨", label: "水彩" },
   { key: "cartoon",   emoji: "🐾", label: "卡通" },
+  { key: "outline",   emoji: "🖋️", label: "极简线条" },
   { key: "kawaii",    emoji: "🌸", label: "萌系贴纸" },
 ];
 

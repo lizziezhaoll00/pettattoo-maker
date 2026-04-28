@@ -26,6 +26,7 @@ const STYLE_CONFIGS: {
   { key: "cartoon",    label: "漫画风", emoji: "🐱", desc: "萌感十足，卡通主子",
     previewImg: "https://images.unsplash.com/photo-1514888286974-6c03e2ca1dba?w=300&q=80" },
   { key: "kawaii",     label: "萌系贴纸", emoji: "🌸", desc: "糖果色系，治愈满分" },
+  { key: "outline",    label: "极简线条", emoji: "🖋️", desc: "一笔画轮廓，留白极简" },
 ];
 
 export default function EditorPage() {
@@ -152,7 +153,7 @@ export default function EditorPage() {
         {/* Step 1: 选择风格 */}
         <section>
           <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Step 1 · 选择风格</h2>
-          <div className="grid grid-cols-5 gap-2">
+          <div className="grid grid-cols-6 gap-2">
             {STYLE_CONFIGS.map((s) => {
               const isActive = activeKey === s.key;
               const cardUrl = getCardUrl(s.key);
