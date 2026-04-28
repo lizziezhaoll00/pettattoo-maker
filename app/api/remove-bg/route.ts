@@ -299,7 +299,14 @@ export async function POST(req: NextRequest) {
           console.log("[remove-bg] LangSAM cropHint 为空，降级到 BiRefNet");
           cleanedBuffer = await runBiRefNet(dataUrl);
         } else {
-          cleanedBuffer = await runLangSAM(arrayBuffer, mimeType, cropHint);
+          try {
+            cleanedBuffer = await runLangSAM(arrayBuffer, mimeType, cropHint);
+          } catch (langsamErr) {
+            // LangSAM 依赖 Replicate Files API 上传，在某些网络环境下会 fetch failed
+            // 自动降级到 BiRefNet，保证主流程不中断
+            console.warn("[remove-bg] LangSAM 失败，降级到 BiRefNet:", langsamErr);
+            cleanedBuffer = await runBiRefNet(dataUrl);
+          }
         }
         break;
 
