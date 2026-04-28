@@ -1,4 +1,5 @@
 import https from "https";
+import http from "http";
 import { NextRequest, NextResponse } from "next/server";
 
 export const maxDuration = 60;
@@ -24,7 +25,7 @@ function downloadImage(
     if (redirectCount > 5) return reject(new Error("图片下载重定向次数过多"));
 
     const parsed = new URL(url);
-    const lib = parsed.protocol === "https:" ? https : require("http");
+    const lib = parsed.protocol === "https:" ? https : http;
 
     lib.get(
       url,

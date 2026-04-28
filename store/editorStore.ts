@@ -1,5 +1,22 @@
 import { create } from "zustand";
-import type { TattooScheme } from "@/app/api/analyze-crop/route";
+import type { CropSuggestion } from "@/app/api/analyze-crop/route";
+
+/** TattooScheme 扩展 CropSuggestion，附加 schemes 页旧版字段（可选，保持向后兼容） */
+export type TattooScheme = CropSuggestion & {
+  tattooPrompt?: string;
+  styleEmoji?: string;
+  poseDesc?: string;
+  bodyPart?: string;
+  size?: string;
+};
+
+/** schemes 页旧版方案生成状态 */
+export type SchemeGenState = "idle" | "generating" | "done" | "error";
+export interface SchemeResult {
+  state: SchemeGenState;
+  url?: string;
+  error?: string;
+}
 
 export type ArtStyle = "lineart" | "watercolor" | "cartoon";
 export type ColorMode = "color" | "bw";
@@ -19,15 +36,6 @@ export const SIZE_CONFIG: Record<SizeKey, { label: string; cm: number; px: numbe
   L: { label: "L · 8cm", cm: 8, px: 945, desc: "锁骨、小臂" },
 };
 
-/** 每个方案的纹身生成状态 */
-export type SchemeGenState = "idle" | "generating" | "done" | "error";
-
-export interface SchemeResult {
-  state: SchemeGenState;
-  url?: string;    // 生成成功后的 data URL
-  error?: string;
-}
-
 interface EditorState {
   // 原始上传图片
   originalFile: File | null;
@@ -38,22 +46,32 @@ interface EditorState {
   isRemoving: boolean;
   removeError: string | null;
 
-  // doubao 分析出的 6 种方案
+  // AI 分析阶段（上传后方案选择）
   tattooSchemes: TattooScheme[];
   isAnalyzing: boolean;
   analyzeError: string | null;
+  selectedSchemeId: string | null;
 
-  // 每个方案的纹身生成结果（key = scheme.id）
+  // schemes 页兼容字段（旧流程，保留防止编译报错）
   schemeResults: Record<string, SchemeResult>;
 
-  // 当前进入编辑器的方案
-  selectedSchemeId: string | null;
+  // 编辑器内风格选择
+  /** "realistic" = 直接用抠图原图；"art" = 用 stylizedUrls[selectedArtStyle] */
+  selectedBase: "realistic" | "art";
+  selectedArtStyle: ArtStyle;
+
+  /** 各艺术风格的生成结果 URL（key = ArtStyle） */
+  stylizedUrls: Record<ArtStyle, string | null>;
+  /** 各风格是否正在生成 */
+  isStylizing: Record<ArtStyle, boolean>;
+  /** 各风格的报错信息 */
+  stylizeErrors: Record<ArtStyle, string | null>;
 
   // 编辑器内精调选项
   colorMode: ColorMode;
   showWhiteBorder: boolean;
   squareCrop: boolean;
-  cropRect: CropRect | null; // null = 不裁切
+  cropRect: CropRect | null;
   selectedSize: SizeKey;
 
   // Actions
@@ -64,8 +82,13 @@ interface EditorState {
   setTattooSchemes: (schemes: TattooScheme[]) => void;
   setIsAnalyzing: (v: boolean) => void;
   setAnalyzeError: (e: string | null) => void;
-  setSchemeResult: (id: string, result: SchemeResult) => void;
   setSelectedSchemeId: (id: string | null) => void;
+  setSchemeResult: (id: string, result: SchemeResult) => void;
+  setSelectedBase: (v: "realistic" | "art") => void;
+  setSelectedArtStyle: (v: ArtStyle) => void;
+  setStylizedUrl: (style: ArtStyle, url: string) => void;
+  setIsStylizing: (style: ArtStyle, v: boolean) => void;
+  setStylizeError: (style: ArtStyle, e: string | null) => void;
   setColorMode: (v: ColorMode) => void;
   setShowWhiteBorder: (v: boolean) => void;
   setSquareCrop: (v: boolean) => void;
@@ -73,6 +96,8 @@ interface EditorState {
   setSelectedSize: (v: SizeKey) => void;
   reset: () => void;
 }
+
+const ART_STYLES: ArtStyle[] = ["lineart", "watercolor", "cartoon"];
 
 const initialState = {
   originalFile: null,
@@ -83,8 +108,13 @@ const initialState = {
   tattooSchemes: [],
   isAnalyzing: false,
   analyzeError: null,
-  schemeResults: {},
   selectedSchemeId: null,
+  schemeResults: {},
+  selectedBase: "realistic" as const,
+  selectedArtStyle: "lineart" as ArtStyle,
+  stylizedUrls: Object.fromEntries(ART_STYLES.map((s) => [s, null])) as Record<ArtStyle, string | null>,
+  isStylizing: Object.fromEntries(ART_STYLES.map((s) => [s, false])) as Record<ArtStyle, boolean>,
+  stylizeErrors: Object.fromEntries(ART_STYLES.map((s) => [s, null])) as Record<ArtStyle, string | null>,
   colorMode: "color" as const,
   showWhiteBorder: false,
   squareCrop: false,
@@ -102,9 +132,17 @@ export const useEditorStore = create<EditorState>((set) => ({
   setTattooSchemes: (schemes) => set({ tattooSchemes: schemes }),
   setIsAnalyzing: (v) => set({ isAnalyzing: v }),
   setAnalyzeError: (e) => set({ analyzeError: e }),
+  setSelectedSchemeId: (id) => set({ selectedSchemeId: id }),
   setSchemeResult: (id, result) =>
     set((s) => ({ schemeResults: { ...s.schemeResults, [id]: result } })),
-  setSelectedSchemeId: (id) => set({ selectedSchemeId: id }),
+  setSelectedBase: (v) => set({ selectedBase: v }),
+  setSelectedArtStyle: (v) => set({ selectedArtStyle: v }),
+  setStylizedUrl: (style, url) =>
+    set((s) => ({ stylizedUrls: { ...s.stylizedUrls, [style]: url } })),
+  setIsStylizing: (style, v) =>
+    set((s) => ({ isStylizing: { ...s.isStylizing, [style]: v } })),
+  setStylizeError: (style, e) =>
+    set((s) => ({ stylizeErrors: { ...s.stylizeErrors, [style]: e } })),
   setColorMode: (v) => set({ colorMode: v }),
   setShowWhiteBorder: (v) => set({ showWhiteBorder: v }),
   setSquareCrop: (v) => set({ squareCrop: v }),

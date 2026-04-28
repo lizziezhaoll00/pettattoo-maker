@@ -116,7 +116,7 @@ export default function Uploader() {
   const router = useRouter();
   const {
     setOriginalFile, setRemovedBgUrl, setIsRemoving, setRemoveError,
-    setCropSuggestions, setIsAnalyzing, setAnalyzeError, setSelectedCropId, reset,
+    setTattooSchemes, setIsAnalyzing, setAnalyzeError, setSelectedSchemeId, reset,
   } = useEditorStore();
 
   const [phase, setPhase] = useState<"idle" | "analyzing" | "selecting" | "removing">("idle");
@@ -152,10 +152,10 @@ export default function Uploader() {
       }
       const fetchedSuggestions: CropSuggestion[] = json.suggestions ?? [];
       setSuggestions(fetchedSuggestions);
-      setCropSuggestions(fetchedSuggestions);
+      setTattooSchemes(fetchedSuggestions);
       if (fetchedSuggestions.length > 0) {
         setSelectedId(fetchedSuggestions[0].id);
-        setSelectedCropId(fetchedSuggestions[0].id);
+        setSelectedSchemeId(fetchedSuggestions[0].id);
       }
       setIsAnalyzing(false);
       setPhase("selecting");
@@ -168,7 +168,7 @@ export default function Uploader() {
       // 报错后回到 idle，让用户重新上传
       setPhase("idle");
     }
-  }, [reset, setOriginalFile, setIsAnalyzing, setAnalyzeError, setCropSuggestions, setSelectedCropId]);
+  }, [reset, setOriginalFile, setIsAnalyzing, setAnalyzeError, setTattooSchemes, setSelectedSchemeId]);
 
   const handleConfirm = useCallback(async () => {
     if (!uploadedFile || !selectedId) return;
@@ -182,7 +182,7 @@ export default function Uploader() {
       try {
         const bgRemovedUrl = await callRemoveBg(uploadedFile, cropHint);
         setRemovedBgUrl(bgRemovedUrl);
-        setSelectedCropId(selectedId);
+        setSelectedSchemeId(selectedId);
         setIsRemoving(false);
         router.push("/editor");
         return;
@@ -200,7 +200,7 @@ export default function Uploader() {
     setRemoveError(lastError);
     setIsRemoving(false);
     setPhase("selecting");
-  }, [uploadedFile, selectedId, suggestions, setIsRemoving, setRemovedBgUrl, setRemoveError, setSelectedCropId, router]);
+  }, [uploadedFile, selectedId, suggestions, setIsRemoving, setRemovedBgUrl, setRemoveError, setSelectedSchemeId, router]);
 
   const handleReset = useCallback(() => {
     setPhase("idle");
@@ -297,7 +297,7 @@ export default function Uploader() {
                   key={s.id}
                   suggestion={s}
                   selected={selectedId === s.id}
-                  onClick={() => { setSelectedId(s.id); setSelectedCropId(s.id); }}
+                  onClick={() => { setSelectedId(s.id); setSelectedSchemeId(s.id); }}
                 />
               ))}
             </div>

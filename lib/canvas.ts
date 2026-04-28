@@ -129,7 +129,6 @@ export function renderFinalCanvas(options: {
       } else {
         sourceCanvas = borderedCanvas;
       }
-      const sourceImg = sourceCanvas || img;
       const srcW = sourceCanvas ? sourceCanvas.width : img.naturalWidth;
       const srcH = sourceCanvas ? sourceCanvas.height : img.naturalHeight;
 

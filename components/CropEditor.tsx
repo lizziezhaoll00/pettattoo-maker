@@ -97,7 +97,7 @@ export default function CropEditor({ imageUrl, initialRect, onConfirm, onCancel 
       const dx = (e.clientX - startX) / imgRect.width;
       const dy = (e.clientY - startY) / imgRect.height;
 
-      setBox((prev) => {
+      setBox((_prev) => {
         let { x, y, w, h } = { ...startBox };
 
         if (handle === "move") {

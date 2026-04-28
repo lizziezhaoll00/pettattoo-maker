@@ -3,7 +3,7 @@
 import { useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useEditorStore } from "@/store/editorStore";
-import type { TattooScheme } from "@/app/api/analyze-crop/route";
+import type { TattooScheme } from "@/store/editorStore";
 
 // ─── 把 blob URL 的抠图转成灰底 data URL，传给 Seedream ────────────────────
 function toGrayBgDataUrl(blobUrl: string): Promise<string> {

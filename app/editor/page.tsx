@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useEditorStore, SIZE_CONFIG, SizeKey, ArtStyle, CropRect } from "@/store/editorStore";
 import { renderFinalCanvas } from "@/lib/canvas";
@@ -30,15 +30,16 @@ const STYLE_CONFIGS: {
 export default function EditorPage() {
   const router = useRouter();
   const {
-    originalUrl, removedBgUrl, isRemoving, removeError,
+    originalUrl, removedBgUrl, isRemoving,
     selectedBase, selectedArtStyle, stylizedUrls, isStylizing, stylizeErrors,
     colorMode, showWhiteBorder, squareCrop, cropRect, selectedSize,
-    setSelectedBase, setSelectedArtStyle, setColorMode, setShowWhiteBorder, setSquareCrop, setCropRect, setSelectedSize,
+    setSelectedBase, setSelectedArtStyle, setColorMode, setShowWhiteBorder, setCropRect, setSelectedSize,
     setStylizedUrl, setIsStylizing, setStylizeError,
   } = useEditorStore();
 
   const [showDownloadModal, setShowDownloadModal] = useState(false);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  /** canvas 渲染结果（仅当 needsCanvas=true 时有值） */
+  const [canvasPreviewUrl, setCanvasPreviewUrl] = useState<string | null>(null);
   const [hoveredStyle, setHoveredStyle] = useState<StyleKey | null>(null);
   const [stylizeToast, setStylizeToast] = useState<string | null>(null);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
@@ -56,16 +57,29 @@ export default function EditorPage() {
   // 用于裁切编辑器预览的源图（不含白边/滤镜）
   const cropSourceUrl = activeImageUrl;
 
+  // needsCanvas 为 false 时直接用源 URL，否则通过 effect 异步渲染
+  const needsCanvas = useMemo(
+    () => !!(activeImageUrl && (showWhiteBorder || squareCrop || cropRect !== null || colorMode === "bw")),
+    [activeImageUrl, showWhiteBorder, squareCrop, cropRect, colorMode]
+  );
+
+  // needsCanvas=true 时异步渲染 canvas
   useEffect(() => {
-    if (!activeImageUrl) { setPreviewUrl(null); return; }
-    const needsCanvas = showWhiteBorder || squareCrop || cropRect !== null || colorMode === "bw";
-    if (!needsCanvas) { setPreviewUrl(activeImageUrl); return; }
+    if (!activeImageUrl || !needsCanvas) return;
     let cancelled = false;
     renderFinalCanvas({ imageUrl: activeImageUrl, size: selectedSize, colorMode, showWhiteBorder, squareCrop, cropRect: cropRect ?? null, mirror: false, isRealistic: selectedBase === "realistic" })
-      .then((canvas) => { if (!cancelled) setPreviewUrl(canvas.toDataURL("image/png")); })
+      .then((canvas) => { if (!cancelled) setCanvasPreviewUrl(canvas.toDataURL("image/png")); })
       .catch(console.error);
     return () => { cancelled = true; };
-  }, [activeImageUrl, selectedSize, colorMode, showWhiteBorder, squareCrop, cropRect, selectedBase]);
+  }, [activeImageUrl, needsCanvas, selectedSize, colorMode, showWhiteBorder, squareCrop, cropRect, selectedBase]);
+
+  // needsCanvas=false 时清空 canvas 缓存（独立 effect 避免同步 setState in effect 的 lint 错误）
+  useEffect(() => {
+    if (!needsCanvas) setCanvasPreviewUrl(null);
+  }, [needsCanvas]);
+
+  // 最终预览 URL：needsCanvas=true 用 canvas 结果，否则直接用源 URL
+  const previewUrl = needsCanvas ? canvasPreviewUrl : activeImageUrl;
 
   const handleSelectStyle = async (key: StyleKey) => {
     if (key === "realistic") { setSelectedBase("realistic"); return; }
@@ -259,7 +273,7 @@ export default function EditorPage() {
           </div>
         </section>
 
-        {previewUrl && (
+        {previewUrl != null && (
           <section>
             <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">预览效果</h2>
             <div className="rounded-2xl border border-gray-100 p-4 flex items-center justify-center min-h-48"
