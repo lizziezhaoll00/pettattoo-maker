@@ -1,7 +1,7 @@
 import https from "https";
 import { NextRequest, NextResponse } from "next/server";
 
-export const maxDuration = 30;
+export const maxDuration = 60; // Hobby 计划最大 60s；Vercel 海外→火山方舟北京延迟高，30s 不够
 
 export interface CropSuggestion {
   id: string;
