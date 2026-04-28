@@ -184,32 +184,38 @@ export async function POST(req: NextRequest) {
       ? `[Subject Info] ${cropHint}${originalImageNote}\n\n${stylePrompt}`
       : stylePrompt;
 
-    // --- 4. 构建请求体（支持多图：原图 + 抠图 + kawaii 参考图） ---
-    // kawaii 风格额外加载本地参考图（public/kawaii-refs/）
-    let kawaiiRefBase64s: string[] = [];
-    if (style === "kawaii") {
-      const refsDir = path.join(process.cwd(), "public", "kawaii-refs");
-      try {
-        const files = fs.readdirSync(refsDir)
-          .filter((f) => /\.(jpe?g|png|webp)$/i.test(f))
-          .sort()
-          .slice(0, 3); // 最多3张，避免超出模型限制
-        for (const file of files) {
-          const buf = fs.readFileSync(path.join(refsDir, file));
-          const ext = path.extname(file).slice(1).toLowerCase().replace("jpg", "jpeg");
-          kawaiiRefBase64s.push(`data:image/${ext};base64,${buf.toString("base64")}`);
-        }
-        console.log(`[seedream-stylize] kawaii 参考图加载：${kawaiiRefBase64s.length} 张`);
-      } catch (e) {
-        console.warn("[seedream-stylize] kawaii 参考图加载失败，降级无参考图:", (e as Error).message);
+    // --- 4. 构建请求体（支持多图：参考图 + 原图 + 抠图主图） ---
+    // 每种风格从对应的 refs 目录加载本地参考图（public/<style>-refs/）
+    const STYLE_REFS_DIR: Record<ArtStyle, string> = {
+      lineart: "lineart-refs",
+      watercolor: "watercolor-refs",
+      cartoon: "cartoon-refs",
+      kawaii: "kawaii-refs",
+    };
+
+    let styleRefBase64s: string[] = [];
+    const refsDir = path.join(process.cwd(), "public", STYLE_REFS_DIR[style]);
+    try {
+      const files = fs.readdirSync(refsDir)
+        .filter((f) => /\.(jpe?g|png|webp)$/i.test(f))
+        .sort()
+        .slice(0, 3); // 最多3张，避免超出模型限制
+      for (const file of files) {
+        const buf = fs.readFileSync(path.join(refsDir, file));
+        const ext = path.extname(file).slice(1).toLowerCase().replace("jpg", "jpeg");
+        styleRefBase64s.push(`data:image/${ext};base64,${buf.toString("base64")}`);
       }
+      console.log(`[seedream-stylize] ${style} 参考图加载：${styleRefBase64s.length} 张`);
+    } catch (e) {
+      // 目录不存在或为空时静默降级（无参考图模式）
+      console.log(`[seedream-stylize] ${style} 无参考图（目录不存在或为空），降级单图模式`);
     }
 
     // 图片数组组装：[...参考图, 原图(可选), 抠图主图]
     // 参考图放最前面，让模型优先理解风格方向
     const imageField = (() => {
       const arr: string[] = [
-        ...kawaiiRefBase64s,
+        ...styleRefBase64s,
         ...(originalBase64 ? [originalBase64] : []),
         imageBase64,
       ];
