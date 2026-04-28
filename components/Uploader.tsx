@@ -116,7 +116,7 @@ export default function Uploader() {
   const router = useRouter();
   const {
     setOriginalFile, setRemovedBgUrl, setIsRemoving, setRemoveError,
-    setTattooSchemes, setIsAnalyzing, setAnalyzeError, setSelectedSchemeId, reset,
+    setTattooSchemes, setIsAnalyzing, setAnalyzeError, setSelectedSchemeId, setSelectedStylizeHint, reset,
   } = useEditorStore();
 
   const [phase, setPhase] = useState<"idle" | "analyzing" | "selecting" | "removing">("idle");
@@ -174,6 +174,7 @@ export default function Uploader() {
     if (!uploadedFile || !selectedId) return;
     const chosen = suggestions.find((s) => s.id === selectedId);
     const cropHint = chosen?.cropHint ?? "";
+    const stylizeHint = chosen?.stylizeHint ?? "";
     setPhase("removing");
     setIsRemoving(true);
     setError(null);
@@ -183,6 +184,7 @@ export default function Uploader() {
         const bgRemovedUrl = await callRemoveBg(uploadedFile, cropHint);
         setRemovedBgUrl(bgRemovedUrl);
         setSelectedSchemeId(selectedId);
+        setSelectedStylizeHint(stylizeHint);
         setIsRemoving(false);
         router.push("/editor");
         return;
@@ -200,7 +202,7 @@ export default function Uploader() {
     setRemoveError(lastError);
     setIsRemoving(false);
     setPhase("selecting");
-  }, [uploadedFile, selectedId, suggestions, setIsRemoving, setRemovedBgUrl, setRemoveError, setSelectedSchemeId, router]);
+  }, [uploadedFile, selectedId, suggestions, setIsRemoving, setRemovedBgUrl, setRemoveError, setSelectedSchemeId, setSelectedStylizeHint, router]);
 
   const handleReset = useCallback(() => {
     setPhase("idle");

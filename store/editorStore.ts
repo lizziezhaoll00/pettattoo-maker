@@ -51,6 +51,8 @@ interface EditorState {
   isAnalyzing: boolean;
   analyzeError: string | null;
   selectedSchemeId: string | null;
+  /** 选中方案的风格化提示（品种、构图约束），拼接到 seedream prompt 防止裁剪 */
+  selectedStylizeHint: string;
 
   // schemes 页兼容字段（旧流程，保留防止编译报错）
   schemeResults: Record<string, SchemeResult>;
@@ -83,6 +85,7 @@ interface EditorState {
   setIsAnalyzing: (v: boolean) => void;
   setAnalyzeError: (e: string | null) => void;
   setSelectedSchemeId: (id: string | null) => void;
+  setSelectedStylizeHint: (hint: string) => void;
   setSchemeResult: (id: string, result: SchemeResult) => void;
   setSelectedBase: (v: "realistic" | "art") => void;
   setSelectedArtStyle: (v: ArtStyle) => void;
@@ -109,6 +112,7 @@ const initialState = {
   isAnalyzing: false,
   analyzeError: null,
   selectedSchemeId: null,
+  selectedStylizeHint: "",
   schemeResults: {},
   selectedBase: "realistic" as const,
   selectedArtStyle: "lineart" as ArtStyle,
@@ -133,6 +137,7 @@ export const useEditorStore = create<EditorState>((set) => ({
   setIsAnalyzing: (v) => set({ isAnalyzing: v }),
   setAnalyzeError: (e) => set({ analyzeError: e }),
   setSelectedSchemeId: (id) => set({ selectedSchemeId: id }),
+  setSelectedStylizeHint: (hint) => set({ selectedStylizeHint: hint }),
   setSchemeResult: (id, result) =>
     set((s) => ({ schemeResults: { ...s.schemeResults, [id]: result } })),
   setSelectedBase: (v) => set({ selectedBase: v }),

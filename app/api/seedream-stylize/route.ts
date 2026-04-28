@@ -119,11 +119,26 @@ async function httpsPost(
   throw lastErr;
 }
 
+/**
+ * 把外部图片 URL 或 data: URL 转换为 base64 data URL
+ * data: URL 直接返回；外部 URL 用 Node.js 下载后转换
+ */
+async function toBase64DataUrl(url: string): Promise<string> {
+  if (url.startsWith("data:")) return url;
+  const { data: imgBuf, contentType } = await downloadImage(url);
+  return `data:${contentType};base64,${imgBuf.toString("base64")}`;
+}
+
 export async function POST(req: NextRequest) {
   try {
-    const { imageUrl, style } = (await req.json()) as {
+    const { imageUrl, originalImageUrl, style, stylizeHint } = (await req.json()) as {
+      /** 抠图后的图片（主图，白底合成），必填 */
       imageUrl: string;
+      /** 原始上传图片（可选），有时能帮助模型理解完整的身形 */
+      originalImageUrl?: string;
       style: ArtStyle;
+      /** analyze-crop 返回的构图约束说明，拼接到 prompt 防止裁剪/变形 */
+      stylizeHint?: string;
     };
 
     if (!imageUrl || !style) {
@@ -135,24 +150,36 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "ARK_API_KEY 未配置" }, { status: 500 });
     }
 
-    // 把图片转成 base64（支持 data URL 或外部 URL）
-    let imageBase64: string;
-    let mimeType = "image/png";
+    // --- 1. 准备主图（抠图后，白底合成）base64 ---
+    const imageBase64 = await toBase64DataUrl(imageUrl);
 
-    if (imageUrl.startsWith("data:")) {
-      imageBase64 = imageUrl;
-    } else {
-      // 外部 URL，用 Node.js 原生 https 下载，避免 Next.js fetch polyfill 的问题
-      const { data: imgBuf, contentType } = await downloadImage(imageUrl);
-      mimeType = contentType;
-      const base64 = imgBuf.toString("base64");
-      imageBase64 = `data:${mimeType};base64,${base64}`;
+    // --- 2. 准备原图（可选）base64 ---
+    let originalBase64: string | null = null;
+    if (originalImageUrl) {
+      try {
+        originalBase64 = await toBase64DataUrl(originalImageUrl);
+      } catch (e) {
+        // 原图加载失败不影响主流程，降级为单图
+        console.warn("[seedream-stylize] 原图加载失败，降级单图模式:", (e as Error).message);
+      }
     }
 
-    const prompt = STYLE_PROMPTS[style];
-    if (!prompt) {
+    // --- 3. 拼接 prompt ---
+    const stylePrompt = STYLE_PROMPTS[style];
+    if (!stylePrompt) {
       return NextResponse.json({ error: "不支持的风格" }, { status: 400 });
     }
+
+    // 把 stylizeHint 拼接到 prompt 最前面，明确告知模型主体范围，防止裁剪
+    const prompt = stylizeHint
+      ? `[Subject Info] ${stylizeHint}\n\n${stylePrompt}`
+      : stylePrompt;
+
+    // --- 4. 构建请求体（支持多图：原图 + 抠图） ---
+    // 当原图可用时，同时传入两张图帮助模型理解完整身形
+    const imageField = originalBase64
+      ? [originalBase64, imageBase64]  // 多图数组：[原图, 抠图白底]
+      : imageBase64;                    // 单图降级
 
     // 当前使用 doubao-seedream-4-5-251128（5.0 无免费额度，临时切换）
     // 恢复 5.0 时改回 "doubao-seedream-5-0-260128"
@@ -160,7 +187,7 @@ export async function POST(req: NextRequest) {
     const reqBody = JSON.stringify({
       model: "doubao-seedream-4-5-251128",
       prompt,
-      image: imageBase64,
+      image: imageField,
       size: "2K",                              // 4.5 / 5.0 均用大写枚举
       response_format: "url",                  // 返回图片 URL，服务端再下载
       sequential_image_generation: "disabled", // 生成单张图（非组图）
@@ -168,7 +195,11 @@ export async function POST(req: NextRequest) {
       watermark: false,                        // 关闭水印
     });
 
-    console.log("[seedream-stylize] 开始调用 Seedream 4.5 API，style:", style);
+    console.log(
+      "[seedream-stylize] 开始调用 Seedream 4.5 API，style:", style,
+      "| 多图模式:", !!originalBase64,
+      "| stylizeHint:", stylizeHint ? stylizeHint.slice(0, 80) : "（无）"
+    );
 
     // 用 Node.js 原生 https 发请求，避免 Next.js fetch polyfill 对大 body 的问题
     const { status, data: rawData } = await httpsPost(

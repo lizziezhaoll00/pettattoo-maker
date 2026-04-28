@@ -32,7 +32,7 @@ export default function EditorPage() {
   const {
     originalUrl, removedBgUrl, isRemoving,
     selectedBase, selectedArtStyle, stylizedUrls, isStylizing, stylizeErrors,
-    colorMode, showWhiteBorder, squareCrop, cropRect, selectedSize,
+    colorMode, showWhiteBorder, squareCrop, cropRect, selectedSize, selectedStylizeHint,
     setSelectedBase, setSelectedArtStyle, setColorMode, setShowWhiteBorder, setCropRect, setSelectedSize,
     setStylizedUrl, setIsStylizing, setStylizeError,
   } = useEditorStore();
@@ -90,7 +90,7 @@ export default function EditorPage() {
     setStylizeError(key as ArtStyle, null);
     setStylizeToast("✨ AI 正在为你家主子生成专属风格，约需 15-30 秒…");
     try {
-      const url = await stylize(removedBgUrl, key as ArtStyle);
+      const url = await stylize(removedBgUrl, key as ArtStyle, selectedStylizeHint, originalUrl ?? undefined);
       setStylizedUrl(key as ArtStyle, url);
       setStylizeToast(null);
     } catch (e) {
@@ -293,7 +293,11 @@ export default function EditorPage() {
       </div>
 
       {showDownloadModal && activeImageUrl && (
-        <DownloadModal imageUrl={activeImageUrl} onClose={() => setShowDownloadModal(false)} />
+        <DownloadModal
+          imageUrl={activeImageUrl}
+          originalUrl={removedBgUrl ?? undefined}
+          onClose={() => setShowDownloadModal(false)}
+        />
       )}
 
       {showCropEditor && cropSourceUrl && (

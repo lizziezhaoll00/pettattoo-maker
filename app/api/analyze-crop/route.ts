@@ -8,6 +8,8 @@ export interface CropSuggestion {
   title: string;
   desc: string;
   cropHint: string;
+  /** 传给风格化模型的补充说明：宠物品种、抠图范围、构图建议等，防止风格化时裁剪/变形 */
+  stylizeHint: string;
 }
 
 function httpsPost(
@@ -47,14 +49,21 @@ const SYSTEM_PROMPT = `你是一位专业的宠物纹身贴构图顾问。用户
 - title: 2-6字中文标题（如"完整身形"）
 - desc: 一句话用户说明（20字以内，说清楚抠什么、效果如何）
 - cropHint: 传给抠图模型的英文提示词（描述要保留哪些区域/元素，供分割模型参考）
+- stylizeHint: 传给 AI 风格化模型的补充说明（英文），包含：
+    1. 宠物的具体品种（如 "golden retriever"、"orange tabby cat"、"bichon frise"）
+    2. 本方案抠图保留的范围（如 "full body including tail"、"head and upper body"）
+    3. 重要构图约束（如 "keep the full silhouette, do not crop any body part"、"portrait orientation"）
+    4. 最终用途提示（固定加上："tattoo sticker design, keep all body parts intact"）
+    示例：stylizeHint: "Subject: golden retriever full body including tail. Keep the complete silhouette with all four legs and tail. Do not crop or cut off any body part. Tattoo sticker design, keep all body parts intact."
 
 分析维度：
 1. 照片中宠物的数量（单只还是多只）——注意：镜像、水面倒影、阴影等情况可能让同一只宠物看起来有多个，此时仍应视为1只
-2. 宠物的姿态（侧卧/坐姿/趴着/站立等）
-3. 有无标志性道具/装饰（项圈、帽子、玩具等）
-4. 背景是否有可以保留的有趣元素
-5. 脸部特写是否清晰有表情
-6. 纹身贴尺寸通常 3-8cm，构图需简洁
+2. 宠物的具体品种（越精确越好，如"金毛""橘猫""比熊"等）
+3. 宠物的姿态（侧卧/坐姿/趴着/站立等）
+4. 有无标志性道具/装饰（项圈、帽子、玩具等）
+5. 背景是否有可以保留的有趣元素
+6. 脸部特写是否清晰有表情
+7. 纹身贴尺寸通常 3-8cm，构图需简洁
 
 常见方案类型参考（根据实际照片选择最合适的2-3个，不要照抄）：
 - 完整全身：保留四肢+尾巴，适合姿态完整的照片
@@ -79,7 +88,7 @@ const SYSTEM_PROMPT = `你是一位专业的宠物纹身贴构图顾问。用户
 
 请严格返回 JSON 数组格式，不要有任何额外文字：
 [
-  { "id": "...", "title": "...", "desc": "...", "cropHint": "..." },
+  { "id": "...", "title": "...", "desc": "...", "cropHint": "...", "stylizeHint": "..." },
   ...
 ]`;
 
@@ -143,6 +152,7 @@ export async function POST(req: NextRequest) {
       title: s.title || "完整抠图",
       desc: s.desc || "保留宠物全身，去除背景",
       cropHint: s.cropHint || "full body of pet, remove background completely",
+      stylizeHint: s.stylizeHint || "Pet full body. Keep the complete silhouette, do not crop any body part. Tattoo sticker design, keep all body parts intact.",
     }));
 
     return NextResponse.json({ suggestions });
@@ -160,18 +170,24 @@ function getDefaultSuggestions(): CropSuggestion[] {
       title: "完整全身",
       desc: "保留四肢尾巴，构图完整自然",
       cropHint: "Precise silhouette of the entire pet body including all four legs and tail, clean fur edges, transparent background",
+      stylizeHint: "Pet full body including all four legs and tail. Keep the complete silhouette, do not crop any body part. Tattoo sticker design, keep all body parts intact.",
     },
     {
       id: "face_close",
       title: "大脸特写",
       desc: "只保留头部，表情丰富更萌",
       cropHint: "Precise silhouette of the pet's face and head, detailed ear and whisker edges, portrait crop, transparent background",
+      stylizeHint: "Pet face and head portrait. Keep the full head including ears. Tattoo sticker design, keep all body parts intact.",
     },
     {
       id: "half_body",
       title: "半身坐姿",
       desc: "上半身+前爪，简洁可爱",
       cropHint: "Precise silhouette of the pet's upper body and front paws, clean fur texture edges, sitting pose, transparent background",
+      stylizeHint: "Pet upper body and front paws, sitting pose. Keep the complete upper silhouette. Tattoo sticker design, keep all body parts intact.",
     },
   ];
 }
+
+// suppress unused warning for getDefaultSuggestions
+void getDefaultSuggestions;
