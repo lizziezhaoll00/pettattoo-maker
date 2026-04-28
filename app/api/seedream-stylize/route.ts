@@ -196,26 +196,30 @@ export async function POST(req: NextRequest) {
       outline: "outline-refs",
     };
 
+    // 参考图：仅在本地开发环境读取（Vercel Serverless 不打包 public/ 参考图目录，
+    // 且多图 base64 会显著增大请求体，在 Vercel→北京链路上容易导致超时）
     let styleRefBase64s: string[] = [];
-    const refsDir = path.join(process.cwd(), "public", STYLE_REFS_DIR[style]);
-    try {
-      const files = fs.readdirSync(refsDir)
-        .filter((f) => /\.(jpe?g|png|webp)$/i.test(f))
-        .sort()
-        .slice(0, 3); // 最多3张，避免超出模型限制
-      for (const file of files) {
-        const buf = fs.readFileSync(path.join(refsDir, file));
-        const ext = path.extname(file).slice(1).toLowerCase().replace("jpg", "jpeg");
-        styleRefBase64s.push(`data:image/${ext};base64,${buf.toString("base64")}`);
+    if (process.env.NODE_ENV === "development") {
+      const refsDir = path.join(process.cwd(), "public", STYLE_REFS_DIR[style]);
+      try {
+        const files = fs.readdirSync(refsDir)
+          .filter((f) => /\.(jpe?g|png|webp)$/i.test(f))
+          .sort()
+          .slice(0, 3);
+        for (const file of files) {
+          const buf = fs.readFileSync(path.join(refsDir, file));
+          const ext = path.extname(file).slice(1).toLowerCase().replace("jpg", "jpeg");
+          styleRefBase64s.push(`data:image/${ext};base64,${buf.toString("base64")}`);
+        }
+        console.log(`[seedream-stylize] 本地开发：${style} 参考图加载 ${styleRefBase64s.length} 张`);
+      } catch {
+        console.log(`[seedream-stylize] 本地开发：${style} 无参考图`);
       }
-      console.log(`[seedream-stylize] ${style} 参考图加载：${styleRefBase64s.length} 张`);
-    } catch (e) {
-      // 目录不存在或为空时静默降级（无参考图模式）
-      console.log(`[seedream-stylize] ${style} 无参考图（目录不存在或为空），降级单图模式`);
+    } else {
+      console.log(`[seedream-stylize] 生产环境：跳过参考图（减少 body 体积，降低超时风险）`);
     }
 
-    // 图片数组组装：[...参考图, 原图(可选), 抠图主图]
-    // 参考图放最前面，让模型优先理解风格方向
+    // 图片数组组装：[...参考图(仅本地), 原图(可选), 抠图主图]
     const imageField = (() => {
       const arr: string[] = [
         ...styleRefBase64s,
