@@ -1,19 +1,23 @@
 import https from "https";
 import http from "http";
+import fs from "fs";
+import path from "path";
 import { NextRequest, NextResponse } from "next/server";
 
 export const maxDuration = 60;
 
-type ArtStyle = "lineart" | "watercolor" | "cartoon";
+type ArtStyle = "lineart" | "watercolor" | "cartoon" | "kawaii";
 
 // 各风格对应的 Seedream prompt
 const STYLE_PROMPTS: Record<ArtStyle, string> = {
   lineart:
-    "将图中的宠物转化为专业转印就绪的细线纹身手稿。采用明确且富有粗细变化的墨黑线条，利用开阔的平行排线和细腻的点刺（stippling）表现毛发体积感，严禁使用密集的交叉网格排线。构图极简，重点刻画眼睛和鼻头的结构以还原神态。纯白背景隔离，具有高级的复古科学插画与矢量线条质感。高对比度黑墨艺术，高级纹身手稿审美。",
+    "将图中的宠物转化为专业转印就绪的细线纹身手稿。采用明确且富有粗细变化的墨黑线条，利用开阔的平行排线和细腻的点刺（stippling）表现毛发体积感，严禁使用密集的交叉网格排线。构图极简，重点刻画眼睛和鼻头的结构以还原神态。纯白背景隔离，具有高级的复古科学插画与矢量线条质感。高对比度黑墨艺术，高级纹身手稿审美。务必精准还原原图中宠物的面部比例与俏皮神态，尤其是双眼中清澈明亮的\"眼神光\"和五官细节。",
   watercolor:
-    "将图中的宠物转化为艺术水彩纹身设计。采用虚实结合的手法：五官与主要轮廓使用柔和的细线固定，躯干毛发采用通透、半透明的水彩晕染。笔触轻盈灵动，伴有自然的艺术墨滴喷溅，色彩明快不脏。务必保留原图宠物的神态/脸部/毛发特征（尤其是眼睛的眼神光）。纯白背景隔离，整体呈现出电影级的光影氛围与高端艺术纸质感。",
+    "将图中的宠物转化为艺术水彩纹身设计。采用虚实结合的手法：五官与面部核心轮廓使用柔和的湿焦笔触勾勒，确保在色彩晕染中依然保持清晰的辨识度。彻底摒弃大面积的纯白与灰色。采用\"负空间\"表现手法，利用主体周围的水洗色层勾勒出宠物的白色边缘。【配色规则】将宠物毛发视为色彩流动的画布，不论宠物原本毛色深浅，必须主动引入艺术性的鲜活色彩，严禁大面积出现纯白或灰白色块。笔触轻盈灵动，伴有自然的艺术墨滴喷溅，色彩明快不脏、不灰、不苍白。纯白背景隔离，整体呈现出电影级的光影氛围与高端艺术纸质感。务必精准还原原图中宠物的面部比例与俏皮神态，尤其是双眼中清澈明亮的\"眼神光\"和五官细节。",
   cartoon:
-    "将图中的宠物转化为高级萌系贴纸艺术。采用日系Q版（Chibi）审美，夸张其灵动的眼神，缩小身体比例，捕捉性格精髓。拥有大胆且极其干净的闭合粗黑轮廓线，采用纯粹的平涂赛璐珞阴影（Flat cell shading），严禁任何形式的纹理或杂色。图案外圈带有一层均匀的、厚度约2px的闭合白边。纯白色背景，高端矢量艺术质感，边缘极其清晰干净，无杂乱线条，无阴影渐变，适合纹身贴纸印刷。",
+    "将图中的宠物转化为高级萌系贴纸艺术。采用日系Q版（Chibi）审美，夸张其灵动的眼神，缩小身体比例，捕捉性格精髓。拥有大胆且极其干净的闭合粗黑轮廓线，采用纯粹的平涂赛璐珞阴影（Flat cell shading），严禁任何形式的纹理或杂色。图案外圈带有一层均匀的、厚度约2px的闭合白边。纯白色背景，高端矢量艺术质感，边缘极其清晰干净，无杂乱线条，无阴影渐变，适合纹身贴纸印刷。务必精准还原原图中宠物的面部比例与俏皮神态，尤其是双眼中清澈明亮的\"眼神光\"和五官细节。",
+  kawaii:
+    "将图中的宠物转化为日韩风萌系手绘插画贴纸。【风格核心】整张图必须是「手绘数字插画」风格，绝对禁止出现照片感或写实摄影质感——宠物需被完整插画化，呈现柔和的手绘笔触、简洁的色块光影、带有轮廓线的插画毛发，风格参考韩国宠物手绘定制贴纸。【宠物呈现】还原原图中宠物的毛色、毛发形态与面部神态（尤其是眼睛的眼神光），以插画方式重绘，宠物居中大头特写，头部和上半身为主体，占画布约 60%，外轮廓带白色 die-cut 边框。【装饰融合——关键】3-5 个 Kawaii 小图标（骨头、草莓、纸杯蛋糕、小鱼、星星等）紧贴宠物轮廓边缘有机排布，部分小图标可轻微叠压在宠物身体边缘，形成一个整体融合的贴纸构图，而非四散分离的独立小贴纸。所有装饰图标采用同一插画风格绘制，低饱和糖果配色。【字体】下方排列彩色 3D 胖乎乎泡泡字「My Baby」，每个字母颜色随机，带 3D 立体阴影，膨胀感强。【整体】纯白背景，全图低饱和糖果色系，清新治愈，整体是一个浑然一体的萌系宠物贴纸，而不是照片拼贴。务必精准还原原图中宠物的面部比例与俏皮神态，尤其是双眼中清澈明亮的\"眼神光\"和五官细节。",
 };
 
 /** 用 Node.js 原生 https/http 下载图片，自动跟随重定向（最多 5 次） */
@@ -131,14 +135,14 @@ async function toBase64DataUrl(url: string): Promise<string> {
 
 export async function POST(req: NextRequest) {
   try {
-    const { imageUrl, originalImageUrl, style, stylizeHint } = (await req.json()) as {
+    const { imageUrl, originalImageUrl, style, cropHint } = (await req.json()) as {
       /** 抠图后的图片（主图，白底合成），必填 */
       imageUrl: string;
       /** 原始上传图片（可选），有时能帮助模型理解完整的身形 */
       originalImageUrl?: string;
       style: ArtStyle;
-      /** analyze-crop 返回的构图约束说明，拼接到 prompt 防止裁剪/变形 */
-      stylizeHint?: string;
+      /** analyze-crop 返回的统一提示词，同时用于抠图和风格化 */
+      cropHint?: string;
     };
 
     if (!imageUrl || !style) {
@@ -171,15 +175,46 @@ export async function POST(req: NextRequest) {
     }
 
     // 把 stylizeHint 拼接到 prompt 最前面，明确告知模型主体范围，防止裁剪
-    const prompt = stylizeHint
-      ? `[Subject Info] ${stylizeHint}\n\n${stylePrompt}`
+    // 当有原图时，补充说明原图的使用规则：只在抠图内容与构图要求有冲突/缺失时才参考原图补全，
+    // 原图不作为主要输入，不要引入原图的背景或其他元素
+    const originalImageNote = originalBase64
+      ? " The final artwork must contain EXACTLY the elements listed in the subject info above — nothing more, nothing less. (1) If the cutout is missing any listed element (e.g. a body part, mat, hat, or accessory is absent or cropped), refer to the original photo to restore it. (2) If the cutout contains any extra element NOT listed in the subject info (e.g. residual background, stray objects), remove it completely. The original photo is for restoration reference only — do not introduce its background or any unlisted element."
+      : "";
+    const prompt = cropHint
+      ? `[Subject Info] ${cropHint}${originalImageNote}\n\n${stylePrompt}`
       : stylePrompt;
 
-    // --- 4. 构建请求体（支持多图：原图 + 抠图） ---
-    // 当原图可用时，同时传入两张图帮助模型理解完整身形
-    const imageField = originalBase64
-      ? [originalBase64, imageBase64]  // 多图数组：[原图, 抠图白底]
-      : imageBase64;                    // 单图降级
+    // --- 4. 构建请求体（支持多图：原图 + 抠图 + kawaii 参考图） ---
+    // kawaii 风格额外加载本地参考图（public/kawaii-refs/）
+    let kawaiiRefBase64s: string[] = [];
+    if (style === "kawaii") {
+      const refsDir = path.join(process.cwd(), "public", "kawaii-refs");
+      try {
+        const files = fs.readdirSync(refsDir)
+          .filter((f) => /\.(jpe?g|png|webp)$/i.test(f))
+          .sort()
+          .slice(0, 3); // 最多3张，避免超出模型限制
+        for (const file of files) {
+          const buf = fs.readFileSync(path.join(refsDir, file));
+          const ext = path.extname(file).slice(1).toLowerCase().replace("jpg", "jpeg");
+          kawaiiRefBase64s.push(`data:image/${ext};base64,${buf.toString("base64")}`);
+        }
+        console.log(`[seedream-stylize] kawaii 参考图加载：${kawaiiRefBase64s.length} 张`);
+      } catch (e) {
+        console.warn("[seedream-stylize] kawaii 参考图加载失败，降级无参考图:", (e as Error).message);
+      }
+    }
+
+    // 图片数组组装：[...参考图, 原图(可选), 抠图主图]
+    // 参考图放最前面，让模型优先理解风格方向
+    const imageField = (() => {
+      const arr: string[] = [
+        ...kawaiiRefBase64s,
+        ...(originalBase64 ? [originalBase64] : []),
+        imageBase64,
+      ];
+      return arr.length === 1 ? arr[0] : arr;
+    })();
 
     // 当前使用 doubao-seedream-4-5-251128（5.0 无免费额度，临时切换）
     // 恢复 5.0 时改回 "doubao-seedream-5-0-260128"
@@ -198,7 +233,7 @@ export async function POST(req: NextRequest) {
     console.log(
       "[seedream-stylize] 开始调用 Seedream 4.5 API，style:", style,
       "| 多图模式:", !!originalBase64,
-      "| stylizeHint:", stylizeHint ? stylizeHint.slice(0, 80) : "（无）"
+      "| cropHint:", cropHint ? cropHint.slice(0, 80) : "（无）"
     );
 
     // 用 Node.js 原生 https 发请求，避免 Next.js fetch polyfill 对大 body 的问题
@@ -245,7 +280,7 @@ export async function POST(req: NextRequest) {
     const { data: imgBuf, contentType } = await downloadImage(imgUrl);
     const b64 = imgBuf.toString("base64");
     const dataUrl = `data:${contentType};base64,${b64}`;
-    return NextResponse.json({ url: dataUrl });
+    return NextResponse.json({ url: dataUrl, promptUsed: prompt });
   } catch (error) {
     console.error("[seedream-stylize]", error);
     const msg = error instanceof Error ? error.message : "风格化服务异常";

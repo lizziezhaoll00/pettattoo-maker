@@ -25,6 +25,7 @@ const STYLE_CONFIGS: {
     previewImg: "https://images.unsplash.com/photo-1533738363-b7f9aef128ce?w=300&q=80" },
   { key: "cartoon",    label: "漫画风", emoji: "🐱", desc: "萌感十足，卡通主子",
     previewImg: "https://images.unsplash.com/photo-1514888286974-6c03e2ca1dba?w=300&q=80" },
+  { key: "kawaii",     label: "萌系贴纸", emoji: "🌸", desc: "糖果色系，治愈满分" },
 ];
 
 export default function EditorPage() {
@@ -32,9 +33,9 @@ export default function EditorPage() {
   const {
     originalUrl, removedBgUrl, isRemoving,
     selectedBase, selectedArtStyle, stylizedUrls, isStylizing, stylizeErrors,
-    colorMode, showWhiteBorder, squareCrop, cropRect, selectedSize, selectedStylizeHint,
+    colorMode, showWhiteBorder, squareCrop, cropRect, selectedSize, selectedCropHint,
     setSelectedBase, setSelectedArtStyle, setColorMode, setShowWhiteBorder, setCropRect, setSelectedSize,
-    setStylizedUrl, setIsStylizing, setStylizeError,
+    setStylizedUrl, clearStylizedUrl, setIsStylizing, setStylizeError,
   } = useEditorStore();
 
   const [showDownloadModal, setShowDownloadModal] = useState(false);
@@ -81,24 +82,38 @@ export default function EditorPage() {
   // 最终预览 URL：needsCanvas=true 用 canvas 结果，否则直接用源 URL
   const previewUrl = needsCanvas ? canvasPreviewUrl : activeImageUrl;
 
+  const doStylize = async (key: ArtStyle) => {
+    if (isStylizing[key] || !removedBgUrl) return;
+    setSelectedBase("art");
+    setSelectedArtStyle(key);
+    setIsStylizing(key, true);
+    setStylizeError(key, null);
+    setStylizeToast("✨ AI 正在为你家主子生成专属风格，约需 15-30 秒…");
+    try {
+      const url = await stylize(removedBgUrl, key, selectedCropHint, originalUrl ?? undefined);
+      setStylizedUrl(key, url);
+      setStylizeToast(null);
+    } catch (e) {
+      setStylizeError(key, e instanceof Error ? e.message : "风格化失败");
+      setStylizeToast(null);
+    } finally {
+      setIsStylizing(key, false);
+    }
+  };
+
   const handleSelectStyle = async (key: StyleKey) => {
     if (key === "realistic") { setSelectedBase("realistic"); return; }
     setSelectedBase("art");
     setSelectedArtStyle(key as ArtStyle);
     if (stylizedUrls[key as ArtStyle] || isStylizing[key as ArtStyle] || !removedBgUrl) return;
-    setIsStylizing(key as ArtStyle, true);
-    setStylizeError(key as ArtStyle, null);
-    setStylizeToast("✨ AI 正在为你家主子生成专属风格，约需 15-30 秒…");
-    try {
-      const url = await stylize(removedBgUrl, key as ArtStyle, selectedStylizeHint, originalUrl ?? undefined);
-      setStylizedUrl(key as ArtStyle, url);
-      setStylizeToast(null);
-    } catch (e) {
-      setStylizeError(key as ArtStyle, e instanceof Error ? e.message : "风格化失败");
-      setStylizeToast(null);
-    } finally {
-      setIsStylizing(key as ArtStyle, false);
-    }
+    await doStylize(key as ArtStyle);
+  };
+
+  const handleRegenStyle = async (e: React.MouseEvent, key: ArtStyle) => {
+    e.stopPropagation();
+    clearStylizedUrl(key);
+    setStylizeError(key, null);
+    await doStylize(key);
   };
 
   const activeKey: StyleKey = selectedBase === "realistic" ? "realistic" : selectedArtStyle;
@@ -137,7 +152,7 @@ export default function EditorPage() {
         {/* Step 1: 选择风格 */}
         <section>
           <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Step 1 · 选择风格</h2>
-          <div className="grid grid-cols-4 gap-2">
+          <div className="grid grid-cols-5 gap-2">
             {STYLE_CONFIGS.map((s) => {
               const isActive = activeKey === s.key;
               const cardUrl = getCardUrl(s.key);
@@ -195,6 +210,17 @@ export default function EditorPage() {
                   </div>
                   {isActive && (
                     <div className="absolute top-1.5 right-1.5 w-4 h-4 bg-amber-400 rounded-full flex items-center justify-center text-white text-[10px] shadow z-10">✓</div>
+                  )}
+                  {/* 重新生成按钮：已有结果 & 非写实风 & 未在生成中 */}
+                  {s.key !== "realistic" && cardUrl && !loading && (
+                    <button
+                      type="button"
+                      title="重新生成"
+                      onClick={(e) => handleRegenStyle(e, s.key as ArtStyle)}
+                      className="absolute top-1.5 left-1.5 w-5 h-5 bg-black/40 hover:bg-black/65 rounded-full flex items-center justify-center text-white text-[11px] shadow z-10 transition-colors"
+                    >
+                      🔄
+                    </button>
                   )}
                 </button>
               );

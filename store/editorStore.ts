@@ -18,7 +18,7 @@ export interface SchemeResult {
   error?: string;
 }
 
-export type ArtStyle = "lineart" | "watercolor" | "cartoon";
+export type ArtStyle = "lineart" | "watercolor" | "cartoon" | "kawaii";
 export type ColorMode = "color" | "bw";
 export type SizeKey = "S" | "M" | "L";
 
@@ -51,8 +51,8 @@ interface EditorState {
   isAnalyzing: boolean;
   analyzeError: string | null;
   selectedSchemeId: string | null;
-  /** 选中方案的风格化提示（品种、构图约束），拼接到 seedream prompt 防止裁剪 */
-  selectedStylizeHint: string;
+  /** 选中方案的统一提示词（抠图+风格化共用） */
+  selectedCropHint: string;
 
   // schemes 页兼容字段（旧流程，保留防止编译报错）
   schemeResults: Record<string, SchemeResult>;
@@ -85,11 +85,12 @@ interface EditorState {
   setIsAnalyzing: (v: boolean) => void;
   setAnalyzeError: (e: string | null) => void;
   setSelectedSchemeId: (id: string | null) => void;
-  setSelectedStylizeHint: (hint: string) => void;
+  setSelectedCropHint: (hint: string) => void;
   setSchemeResult: (id: string, result: SchemeResult) => void;
   setSelectedBase: (v: "realistic" | "art") => void;
   setSelectedArtStyle: (v: ArtStyle) => void;
   setStylizedUrl: (style: ArtStyle, url: string) => void;
+  clearStylizedUrl: (style: ArtStyle) => void;
   setIsStylizing: (style: ArtStyle, v: boolean) => void;
   setStylizeError: (style: ArtStyle, e: string | null) => void;
   setColorMode: (v: ColorMode) => void;
@@ -100,7 +101,7 @@ interface EditorState {
   reset: () => void;
 }
 
-const ART_STYLES: ArtStyle[] = ["lineart", "watercolor", "cartoon"];
+const ART_STYLES: ArtStyle[] = ["lineart", "watercolor", "cartoon", "kawaii"];
 
 const initialState = {
   originalFile: null,
@@ -112,7 +113,7 @@ const initialState = {
   isAnalyzing: false,
   analyzeError: null,
   selectedSchemeId: null,
-  selectedStylizeHint: "",
+  selectedCropHint: "",
   schemeResults: {},
   selectedBase: "realistic" as const,
   selectedArtStyle: "lineart" as ArtStyle,
@@ -137,13 +138,15 @@ export const useEditorStore = create<EditorState>((set) => ({
   setIsAnalyzing: (v) => set({ isAnalyzing: v }),
   setAnalyzeError: (e) => set({ analyzeError: e }),
   setSelectedSchemeId: (id) => set({ selectedSchemeId: id }),
-  setSelectedStylizeHint: (hint) => set({ selectedStylizeHint: hint }),
+  setSelectedCropHint: (hint) => set({ selectedCropHint: hint }),
   setSchemeResult: (id, result) =>
     set((s) => ({ schemeResults: { ...s.schemeResults, [id]: result } })),
   setSelectedBase: (v) => set({ selectedBase: v }),
   setSelectedArtStyle: (v) => set({ selectedArtStyle: v }),
   setStylizedUrl: (style, url) =>
     set((s) => ({ stylizedUrls: { ...s.stylizedUrls, [style]: url } })),
+  clearStylizedUrl: (style) =>
+    set((s) => ({ stylizedUrls: { ...s.stylizedUrls, [style]: null } })),
   setIsStylizing: (style, v) =>
     set((s) => ({ isStylizing: { ...s.isStylizing, [style]: v } })),
   setStylizeError: (style, e) =>

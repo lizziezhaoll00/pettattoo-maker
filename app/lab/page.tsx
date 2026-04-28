@@ -23,34 +23,43 @@ interface CropSuggestion {
 // ─── 类型 ────────────────────────────────────────────────────────────────────
 
 type RembgModel = "birefnet" | "rembg" | "removebg" | "langsam";
-type ArtStyle = "lineart" | "watercolor" | "cartoon";
-
+type ArtStyle = "lineart" | "watercolor" | "cartoon" | "kawaii";
 type StepState = "idle" | "loading" | "done" | "error";
 
+interface StyleResult {
+  state: StepState;
+  url?: string;
+  ms?: number;
+  error?: string;
+  prompt?: string;
+}
+
 interface ColumnResult {
-  removeBg: { state: StepState; url?: string; ms?: number; error?: string };
-  stylize: { state: StepState; url?: string; ms?: number; error?: string };
+  /** 列的显示标题（如模型名或方案名） */
+  label: string;
+  /** 列的副标题（费用说明等） */
+  sublabel: string;
+  /** 抠图结果 */
+  removeBg: { state: StepState; url?: string; ms?: number; error?: string; prompt?: string };
+  /** 每个风格的结果 */
+  stylize: Partial<Record<ArtStyle, StyleResult>>;
 }
 
 // ─── 常量 ────────────────────────────────────────────────────────────────────
 
 const MODELS: { key: RembgModel; label: string; desc: string }[] = [
-  { key: "birefnet",     label: "BiRefNet",      desc: "A100 · ~12s · $0.002" },
-  { key: "rembg",        label: "rembg",         desc: "T4   · ~1s  · $0.00045" },
-  { key: "removebg",    label: "remove.bg",     desc: "商业 · ~2s  · 50次/月免费" },
-  { key: "langsam",     label: "LangSAM",       desc: "文本引导 · ~5-15s · $0.002" },
+  { key: "birefnet",  label: "BiRefNet",   desc: "A100 · ~12s · $0.002" },
+  { key: "rembg",    label: "rembg",      desc: "T4   · ~1s  · $0.00045" },
+  { key: "removebg", label: "remove.bg",  desc: "商业 · ~2s  · 50次/月免费" },
+  { key: "langsam",  label: "LangSAM",    desc: "文本引导 · ~5-15s · $0.002" },
 ];
 
 const STYLES: { key: ArtStyle; emoji: string; label: string }[] = [
   { key: "lineart",   emoji: "✏️", label: "线稿" },
   { key: "watercolor",emoji: "🎨", label: "水彩" },
   { key: "cartoon",   emoji: "🐾", label: "卡通" },
+  { key: "kawaii",    emoji: "🌸", label: "萌系贴纸" },
 ];
-
-const EMPTY_RESULT = (): ColumnResult => ({
-  removeBg: { state: "idle" },
-  stylize:  { state: "idle" },
-});
 
 // ─── 工具函数 ─────────────────────────────────────────────────────────────────
 
@@ -61,10 +70,10 @@ function fmtMs(ms?: number) {
 
 function StatusBadge({ state }: { state: StepState }) {
   const map: Record<StepState, { text: string; cls: string }> = {
-    idle:    { text: "等待",   cls: "bg-gray-100 text-gray-500" },
+    idle:    { text: "等待",    cls: "bg-gray-100 text-gray-500" },
     loading: { text: "处理中…", cls: "bg-yellow-100 text-yellow-700 animate-pulse" },
-    done:    { text: "完成",   cls: "bg-green-100 text-green-700" },
-    error:   { text: "失败",   cls: "bg-red-100 text-red-600" },
+    done:    { text: "完成",    cls: "bg-green-100 text-green-700" },
+    error:   { text: "失败",    cls: "bg-red-100 text-red-600" },
   };
   const { text, cls } = map[state];
   return <span className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${cls}`}>{text}</span>;
@@ -78,19 +87,22 @@ export default function LabPage() {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [selectedModels, setSelectedModels] = useState<Set<RembgModel>>(new Set(["birefnet", "removebg"]));
   const [withStylize, setWithStylize] = useState(false);
-  const [selectedStyle, setSelectedStyle] = useState<ArtStyle>("lineart");
+  /** 多选风格 */
+  const [selectedStyles, setSelectedStyles] = useState<Set<ArtStyle>>(new Set(["lineart"]));
 
   // LangSAM 方案状态
   const [cropSuggestions, setCropSuggestions] = useState<CropSuggestion[]>([]);
-  const [selectedSuggestionId, setSelectedSuggestionId] = useState<string | null>(null);
+  /** 多选方案 */
+  const [selectedSuggestionIds, setSelectedSuggestionIds] = useState<Set<string>>(new Set());
   const [cropHintForLab, setCropHintForLab] = useState<string>("the pet and its accessories on a cozy indoor background");
   const [cropHintAnalyzing, setCropHintAnalyzing] = useState(false);
-  const [results, setResults] = useState<Record<RembgModel, ColumnResult>>({
-    birefnet:    EMPTY_RESULT(),
-    rembg:       EMPTY_RESULT(),
-    removebg:    EMPTY_RESULT(),
-    langsam:     EMPTY_RESULT(),
-  });
+
+  /**
+   * 结果字典：key = columnKey
+   * - 非 LangSAM 模型：key = model  ("birefnet" | "rembg" | "removebg")
+   * - LangSAM 方案：  key = "langsam:{suggestionId}"（每个选中方案独占一列）
+   */
+  const [results, setResults] = useState<Record<string, ColumnResult>>({});
   const [running, setRunning] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -122,7 +134,7 @@ export default function LabPage() {
   const analyzeForLangSAM = useCallback(async (file: File) => {
     setCropHintAnalyzing(true);
     setCropSuggestions([]);
-    setSelectedSuggestionId(null);
+    setSelectedSuggestionIds(new Set());
     try {
       const imageDataUrl = await compressForAnalyze(file);
       const res = await fetch("/api/analyze-crop", {
@@ -135,7 +147,7 @@ export default function LabPage() {
       if (suggestions?.length) {
         setCropSuggestions(suggestions);
         // 默认选中第一条
-        setSelectedSuggestionId(suggestions[0].id);
+        setSelectedSuggestionIds(new Set([suggestions[0].id]));
         setCropHintForLab(suggestions[0].cropHint);
       }
     } catch {
@@ -149,10 +161,10 @@ export default function LabPage() {
   const handleFile = useCallback((file: File) => {
     setImageFile(file);
     setPreviewUrl(URL.createObjectURL(file));
-    setResults({ birefnet: EMPTY_RESULT(), rembg: EMPTY_RESULT(), removebg: EMPTY_RESULT(), langsam: EMPTY_RESULT() });
+    setResults({});
     // 切换图片时清空旧的方案
     setCropSuggestions([]);
-    setSelectedSuggestionId(null);
+    setSelectedSuggestionIds(new Set());
     // 如果已选中 LangSAM，自动分析新图片
     if (selectedModels.has("langsam")) {
       analyzeForLangSAM(file);
@@ -177,20 +189,84 @@ export default function LabPage() {
       if (next.has(key) && next.size === 1) return prev; // 至少留一个
       next.has(key) ? next.delete(key) : next.add(key);
       if (!prev.has("langsam") && key === "langsam" && imageFile) {
-        // 刚勾选 LangSAM 且已有图片：自动劆析填充 prompt
+        // 刚勾选 LangSAM 且已有图片：自动分析填充 prompt
         analyzeForLangSAM(imageFile);
       }
       return next;
     });
   };
 
+  // ── LangSAM 方案多选 ──
+  const toggleSuggestion = (s: CropSuggestion) => {
+    setSelectedSuggestionIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(s.id)) {
+        if (next.size === 1) return prev; // 至少留一个
+        next.delete(s.id);
+      } else {
+        next.add(s.id);
+      }
+      // 若最终只剩一个选中，同步更新手动微调框
+      if (next.size === 1) {
+        const singleId = Array.from(next)[0];
+        const single = cropSuggestions.find((x) => x.id === singleId);
+        if (single) {
+          setCropHintForLab(single.cropHint);
+        }
+      }
+      return next;
+    });
+  };
+
+  // ── 风格多选 ──
+  const toggleStyle = (key: ArtStyle) => {
+    setSelectedStyles((prev) => {
+      const next = new Set(prev);
+      if (next.has(key) && next.size === 1) return prev; // 至少留一个
+      next.has(key) ? next.delete(key) : next.add(key);
+      return next;
+    });
+  };
+
+  // ── 生成列键 ──
+  const buildColumnKeys = useCallback((): string[] => {
+    const keys: string[] = [];
+    for (const m of selectedModels) {
+      if (m === "langsam") {
+        // 每个选中方案独占一列
+        for (const id of selectedSuggestionIds) {
+          keys.push(`langsam:${id}`);
+        }
+        // 若没有选中方案（尚未分析），用默认一列
+        if (selectedSuggestionIds.size === 0) {
+          keys.push("langsam:default");
+        }
+      } else {
+        keys.push(m);
+      }
+    }
+    return keys;
+  }, [selectedModels, selectedSuggestionIds]);
+
   // ── 单列处理逻辑 ──
   const runColumn = useCallback(
-    async (model: RembgModel, file: File, doStylize: boolean, style: ArtStyle, _hint?: string) => {
+    async (
+      columnKey: string,
+      file: File,
+      doStylize: boolean,
+      styles: ArtStyle[],
+      cropHint: string,
+    ) => {
+      const model = columnKey.startsWith("langsam") ? "langsam" : (columnKey as RembgModel);
+
       // 1. 抠图
       setResults((prev) => ({
         ...prev,
-        [model]: { removeBg: { state: "loading" }, stylize: { state: "idle" } },
+        [columnKey]: {
+          ...prev[columnKey],
+          removeBg: { state: "loading" },
+          stylize: {},
+        },
       }));
 
       let removeBgUrl: string | undefined;
@@ -199,9 +275,8 @@ export default function LabPage() {
         const fd = new FormData();
         fd.append("image", file);
         fd.append("model", model);
-        // LangSAM 需要传 cropHint 作为分割提示词
-        if (model === "langsam") fd.append("cropHint", cropHintForLab);
-        console.log(`[Lab] 🚀 model=${model} | cropHint=${model === "langsam" ? cropHintForLab : "(不适用)"}`);
+        if (model === "langsam") fd.append("cropHint", cropHint);
+        console.log(`[Lab] 🚀 col=${columnKey} | cropHint=${model === "langsam" ? cropHint : "(不适用)"}`);
         const res = await fetch("/api/remove-bg", { method: "POST", body: fd });
         if (!res.ok) {
           const text = await res.text();
@@ -209,41 +284,34 @@ export default function LabPage() {
           try { msg = JSON.parse(text)?.error ?? text; } catch { /* ignore */ }
           throw new Error(msg);
         }
+        const textPromptHeader = res.headers.get("x-text-prompt") ?? undefined;
         const blob = await res.blob();
         removeBgUrl = URL.createObjectURL(blob);
         const ms = Date.now() - t0;
         setResults((prev) => ({
           ...prev,
-          [model]: {
-            ...prev[model],
-            removeBg: { state: "done", url: removeBgUrl, ms },
+          [columnKey]: {
+            ...prev[columnKey],
+            removeBg: { state: "done", url: removeBgUrl, ms, prompt: textPromptHeader || undefined },
           },
         }));
       } catch (err) {
         setResults((prev) => ({
           ...prev,
-          [model]: {
-            ...prev[model],
+          [columnKey]: {
+            ...prev[columnKey],
             removeBg: { state: "error", error: (err as Error).message, ms: Date.now() - t0 },
           },
         }));
-        return; // 抠图失败就不继续风格化
+        return;
       }
 
-      if (!doStylize || !removeBgUrl) return;
+      if (!doStylize || !removeBgUrl || styles.length === 0) return;
 
-      // 2. 风格化
-      setResults((prev) => ({
-        ...prev,
-        [model]: { ...prev[model], stylize: { state: "loading" } },
-      }));
-
-      const t1 = Date.now();
+      // 2. 把 blob URL 转成带灰底的 base64 data URL（只做一次）
+      let dataUrl: string;
       try {
-        // 把 blob URL 转成带灰底的 base64 data URL 传给后端
-        // ⚠️ 不能直接编码透明 PNG：Seedream 图生图对大面积透明图片会报 400
-        // 必须先在 Canvas 铺 #e8e8e8 灰底再合并抠图，与 lib/stylize.ts toDataUrl() 保持一致
-        const dataUrl = await new Promise<string>((resolve, reject) => {
+        dataUrl = await new Promise<string>((resolve, reject) => {
           const img = new Image();
           img.onload = () => {
             const canvas = document.createElement("canvas");
@@ -256,33 +324,71 @@ export default function LabPage() {
             resolve(canvas.toDataURL("image/png"));
           };
           img.onerror = () => reject(new Error("图片加载失败"));
-          img.src = removeBgUrl;
+          img.src = removeBgUrl!;
         });
-
-        const res = await fetch("/api/seedream-stylize", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ imageUrl: dataUrl, style }),
-        });
-        if (!res.ok) throw new Error(await res.text());
-        const { url, error } = await res.json();
-        if (error) throw new Error(error);
-        const ms = Date.now() - t1;
-        setResults((prev) => ({
-          ...prev,
-          [model]: { ...prev[model], stylize: { state: "done", url, ms } },
-        }));
       } catch (err) {
-        setResults((prev) => ({
-          ...prev,
-          [model]: {
-            ...prev[model],
-            stylize: { state: "error", error: (err as Error).message, ms: Date.now() - t1 },
-          },
-        }));
+        for (const style of styles) {
+          setResults((prev) => ({
+            ...prev,
+            [columnKey]: {
+              ...prev[columnKey],
+              stylize: {
+                ...prev[columnKey]?.stylize,
+                [style]: { state: "error", error: (err as Error).message },
+              },
+            },
+          }));
+        }
+        return;
       }
+
+      // 3. 并发跑所有选中风格
+      await Promise.all(
+        styles.map(async (style) => {
+          setResults((prev) => ({
+            ...prev,
+            [columnKey]: {
+              ...prev[columnKey],
+              stylize: { ...prev[columnKey]?.stylize, [style]: { state: "loading" } },
+            },
+          }));
+          const t1 = Date.now();
+          try {
+            const res = await fetch("/api/seedream-stylize", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ imageUrl: dataUrl, style, cropHint: cropHint || undefined }),
+            });
+            if (!res.ok) throw new Error(await res.text());
+            const { url, error, promptUsed } = await res.json();
+            if (error) throw new Error(error);
+            const ms = Date.now() - t1;
+            setResults((prev) => ({
+              ...prev,
+              [columnKey]: {
+                ...prev[columnKey],
+                stylize: {
+                  ...prev[columnKey]?.stylize,
+                  [style]: { state: "done", url, ms, prompt: promptUsed },
+                },
+              },
+            }));
+          } catch (err) {
+            setResults((prev) => ({
+              ...prev,
+              [columnKey]: {
+                ...prev[columnKey],
+                stylize: {
+                  ...prev[columnKey]?.stylize,
+                  [style]: { state: "error", error: (err as Error).message, ms: Date.now() - t1 },
+                },
+              },
+            }));
+          }
+        })
+      );
     },
-    [cropHintForLab]
+    [] // cropHint 通过参数传入，不作依赖
   );
 
   // ── 开始测试 ──
@@ -290,43 +396,68 @@ export default function LabPage() {
     if (!imageFile || running) return;
     setRunning(true);
 
-    // 只跑「没有结果」的模型，已有 done/error 结果的跳过，避免重复调用
-    const targets = Array.from(selectedModels).filter((m) => {
-      const col = results[m];
-      return col.removeBg.state === "idle" || col.removeBg.state === "error";
+    const columnKeys = buildColumnKeys();
+
+    // 只跑「没有结果」的列，已有 done/error 结果的跳过
+    const targets = columnKeys.filter((k) => {
+      const col = results[k];
+      return !col || col.removeBg.state === "idle" || col.removeBg.state === "error";
     });
 
-    // 如果所有模型都已有结果，则全部重置后重跑（明确点击重跑的场景）
-    const allDone = Array.from(selectedModels).every(
-      (m) => results[m].removeBg.state === "done"
-    );
-    const actualTargets = allDone ? Array.from(selectedModels) : targets;
+    // 所有列都已有结果 → 全部重置后重跑
+    const allDone = columnKeys.every((k) => results[k]?.removeBg.state === "done");
+    const actualTargets = allDone ? columnKeys : targets;
     if (allDone) {
-      setResults({ birefnet: EMPTY_RESULT(), rembg: EMPTY_RESULT(), removebg: EMPTY_RESULT(), langsam: EMPTY_RESULT() });
+      setResults({});
     }
 
+    // 预先设置列的 label（确保 allDone 重置后列仍然可见）
+    const initResults: Record<string, ColumnResult> = {};
+    for (const key of actualTargets) {
+      const model = key.startsWith("langsam") ? "langsam" : key;
+      const cfg = MODELS.find((m) => m.key === model)!;
+      let label = cfg.label;
+      let sublabel = cfg.desc;
+      if (key.startsWith("langsam:") && key !== "langsam:default") {
+        const id = key.slice("langsam:".length);
+        const s = cropSuggestions.find((x) => x.id === id);
+        if (s) { label = `${s.emoji} ${s.title}`; sublabel = s.desc; }
+      }
+      initResults[key] = { label, sublabel, removeBg: { state: "idle" }, stylize: {} };
+    }
+    setResults((prev) => {
+      if (allDone) return initResults;
+      return { ...prev, ...initResults };
+    });
+
+    const stylesToRun = withStylize ? Array.from(selectedStyles) : [];
+
     // 串行跑，避免同一账号并发触发 Replicate 429 限流
-    for (const m of actualTargets) {
-      await runColumn(m, imageFile, withStylize, selectedStyle);
+    for (const key of actualTargets) {
+      // 确定本列的 cropHint
+      let cropHint = cropHintForLab;
+      if (key.startsWith("langsam:") && key !== "langsam:default") {
+        const id = key.slice("langsam:".length);
+        const s = cropSuggestions.find((x) => x.id === id);
+        if (s) cropHint = s.cropHint;
+      }
+      await runColumn(key, imageFile, withStylize, stylesToRun, cropHint);
     }
     setRunning(false);
   };
 
   // ── 渲染单列结果 ──
-  const renderColumn = (model: RembgModel) => {
-    const cfg = MODELS.find((m) => m.key === model)!;
-    const col = results[model];
-    const active = selectedModels.has(model);
-    if (!active) return null;
+  const renderColumn = (key: string) => {
+    const col = results[key];
+    if (!col) return null;
+    const stylesToShow = withStylize ? Array.from(selectedStyles) : [];
 
     return (
-      <div key={model} className="flex-1 min-w-0 border border-gray-200 rounded-xl overflow-hidden bg-white">
+      <div key={key} className="flex-1 min-w-0 border border-gray-200 rounded-xl overflow-hidden bg-white">
         {/* 列头 */}
-        <div className="px-4 py-3 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
-          <div>
-            <span className="font-semibold text-gray-800">{cfg.label}</span>
-            <span className="ml-2 text-xs text-gray-400">{cfg.desc}</span>
-          </div>
+        <div className="px-4 py-3 bg-gray-50 border-b border-gray-200">
+          <span className="font-semibold text-gray-800">{col.label}</span>
+          <span className="ml-2 text-xs text-gray-400">{col.sublabel}</span>
         </div>
 
         {/* 抠图结果 */}
@@ -351,38 +482,75 @@ export default function LabPage() {
               </div>
             )}
           </div>
+          {col.removeBg.prompt && (
+            <details className="mt-2 group">
+              <summary className="text-xs text-blue-500 cursor-pointer hover:text-blue-700 select-none flex items-center gap-1">
+                <span className="group-open:rotate-90 transition-transform inline-block">▶</span>
+                text_prompt
+              </summary>
+              <pre className="mt-1.5 p-2 bg-gray-900 text-green-400 text-[11px] leading-relaxed rounded-lg overflow-x-auto whitespace-pre-wrap break-all">{col.removeBg.prompt}</pre>
+            </details>
+          )}
         </div>
 
-        {/* 风格化结果（仅勾选时展示） */}
-        {withStylize && (
-          <div className="px-4 pb-4">
-            <div className="flex items-center gap-2 mb-2">
-              <span className="text-sm font-medium text-gray-600">
-                风格化 · {STYLES.find((s) => s.key === selectedStyle)?.label}
-              </span>
-              <StatusBadge state={col.stylize.state} />
-              {col.stylize.ms != null && (
-                <span className="text-xs text-gray-400">{fmtMs(col.stylize.ms)}</span>
+        {/* 风格化结果（仅勾选且有结果时展示）*/}
+        {withStylize && stylesToShow.map((style) => {
+          const sr = col.stylize[style];
+          const styleCfg = STYLES.find((s) => s.key === style)!;
+          return (
+            <div key={style} className="px-4 pb-4">
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-sm font-medium text-gray-600">
+                  {styleCfg.emoji} {styleCfg.label}
+                </span>
+                <StatusBadge state={sr?.state ?? "idle"} />
+                {sr?.ms != null && (
+                  <span className="text-xs text-gray-400">{fmtMs(sr.ms)}</span>
+                )}
+              </div>
+              <div className="rounded-lg overflow-hidden bg-white border border-gray-100">
+                {sr?.url ? (
+                  <img src={sr.url} alt={`${styleCfg.label}结果`} className="w-full object-contain max-h-72" />
+                ) : sr?.state === "error" ? (
+                  <div className="flex items-center justify-center h-32 text-xs text-red-500 px-3 text-center bg-red-50">
+                    {sr.error || "未知错误"}
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-center h-32 text-gray-300 text-sm bg-gray-50">
+                    {sr?.state === "loading" ? "🎨 生成中…" : "等待运行"}
+                  </div>
+                )}
+              </div>
+              {sr?.prompt && (
+                <details className="mt-2 group">
+                  <summary className="text-xs text-purple-500 cursor-pointer hover:text-purple-700 select-none flex items-center gap-1">
+                    <span className="group-open:rotate-90 transition-transform inline-block">▶</span>
+                    Seedream prompt
+                  </summary>
+                  <pre className="mt-1.5 p-2 bg-gray-900 text-purple-300 text-[11px] leading-relaxed rounded-lg overflow-x-auto whitespace-pre-wrap break-all">{sr.prompt}</pre>
+                </details>
               )}
             </div>
-            <div className="rounded-lg overflow-hidden bg-white border border-gray-100">
-              {col.stylize.url ? (
-                <img src={col.stylize.url} alt="风格化结果" className="w-full object-contain max-h-72" />
-              ) : col.stylize.state === "error" ? (
-                <div className="flex items-center justify-center h-32 text-xs text-red-500 px-3 text-center bg-red-50">
-                  {col.stylize.error || "未知错误"}
-                </div>
-              ) : (
-                <div className="flex items-center justify-center h-32 text-gray-300 text-sm bg-gray-50">
-                  {col.stylize.state === "loading" ? "🎨 生成中…" : "等待运行"}
-                </div>
-              )}
-            </div>
-          </div>
-        )}
+          );
+        })}
       </div>
     );
   };
+
+  // ── 构建当前要展示的列键列表 ──
+  const displayKeys = buildColumnKeys().filter((k) => results[k]);
+
+  // ── 运行按钮文案 ──
+  const runBtnLabel = (() => {
+    if (running) return "⏳ 运行中…";
+    const allKeys = buildColumnKeys();
+    const allDone = allKeys.length > 0 && allKeys.every((k) => results[k]?.removeBg.state === "done");
+    const pending = allKeys.filter((k) => !results[k] || results[k].removeBg.state === "idle" || results[k].removeBg.state === "error");
+    if (allDone) return `🔄 重新全部跑 (${allKeys.length} 列)`;
+    const skip = allKeys.length - pending.length;
+    const extra = withStylize ? ` + ${selectedStyles.size} 个风格` : "";
+    return `🚀 开始测试 (${pending.length} 列${skip > 0 ? `，跳过 ${skip} 个已有结果` : ""}${extra})`;
+  })();
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -393,7 +561,7 @@ export default function LabPage() {
         <span className="ml-auto text-xs text-gray-400 bg-gray-100 px-2 py-1 rounded">内部专用 · 不对外开放</span>
       </div>
 
-      <div className="max-w-5xl mx-auto px-4 py-6 space-y-6">
+      <div className="max-w-7xl mx-auto px-4 py-6 space-y-6">
         {/* ── 控制面板 ── */}
         <div className="bg-white rounded-xl border border-gray-200 p-5 space-y-5">
 
@@ -455,12 +623,13 @@ export default function LabPage() {
             </div>
           </div>
 
-          {/* 文本引导抠图方案（选中 LangSAM 或 Grounded SAM 时显示）*/}
-          {(selectedModels.has("langsam")) && (
+          {/* 文本引导抠图方案（选中 LangSAM 时显示）*/}
+          {selectedModels.has("langsam") && (
             <div>
               <div className="flex items-center justify-between mb-2">
                 <label className="text-sm font-medium text-gray-700">
                   文本引导抠图方案（LangSAM）
+                  <span className="ml-1.5 text-xs text-gray-400 font-normal">可多选，每个方案独占一列对比</span>
                   {cropHintAnalyzing && (
                     <span className="ml-2 text-xs text-blue-500 animate-pulse">🤖 AI 分析图片中…</span>
                   )}
@@ -475,7 +644,7 @@ export default function LabPage() {
                 )}
               </div>
 
-              {/* 方案卡片列表 */}
+              {/* 方案卡片列表（多选） */}
               {cropHintAnalyzing ? (
                 <div className="flex gap-3">
                   {[1, 2, 3].map((i) => (
@@ -484,29 +653,29 @@ export default function LabPage() {
                 </div>
               ) : cropSuggestions.length > 0 ? (
                 <div className="flex gap-3 flex-wrap">
-                  {cropSuggestions.map((s) => (
-                    <button
-                      key={s.id}
-                      onClick={() => {
-                        setSelectedSuggestionId(s.id);
-                        setCropHintForLab(s.cropHint);
-                      }}
-                      className={`flex-1 min-w-40 text-left px-3 py-2.5 rounded-xl border-2 transition-all ${
-                        selectedSuggestionId === s.id
-                          ? "border-blue-500 bg-blue-50"
-                          : "border-gray-200 bg-white hover:border-gray-300"
-                      }`}
-                    >
-                      <div className="flex items-center gap-1.5 mb-0.5">
-                        <span className="text-base">{s.emoji}</span>
-                        <span className="font-semibold text-sm text-gray-800">{s.title}</span>
-                        {selectedSuggestionId === s.id && (
-                          <span className="ml-auto text-blue-500 text-xs">✓ 已选</span>
-                        )}
-                      </div>
-                      <p className="text-xs text-gray-500 leading-relaxed">{s.desc}</p>
-                    </button>
-                  ))}
+                  {cropSuggestions.map((s) => {
+                    const isSelected = selectedSuggestionIds.has(s.id);
+                    return (
+                      <button
+                        key={s.id}
+                        onClick={() => toggleSuggestion(s)}
+                        className={`flex-1 min-w-40 text-left px-3 py-2.5 rounded-xl border-2 transition-all ${
+                          isSelected
+                            ? "border-blue-500 bg-blue-50"
+                            : "border-gray-200 bg-white hover:border-gray-300"
+                        }`}
+                      >
+                        <div className="flex items-center gap-1.5 mb-0.5">
+                          <span className="text-base">{s.emoji}</span>
+                          <span className="font-semibold text-sm text-gray-800">{s.title}</span>
+                          {isSelected && (
+                            <span className="ml-auto text-blue-500 text-xs">✓</span>
+                          )}
+                        </div>
+                        <p className="text-xs text-gray-500 leading-relaxed">{s.desc}</p>
+                      </button>
+                    );
+                  })}
                 </div>
               ) : (
                 <div className="text-xs text-gray-400 bg-gray-50 rounded-lg px-3 py-2">
@@ -514,26 +683,50 @@ export default function LabPage() {
                 </div>
               )}
 
-              {/* 当前 cropHint 预览（可微调）*/}
-              <div className="mt-3">
-                <div className="flex items-center gap-1.5 mb-1">
-                  <span className="text-xs text-gray-500 font-medium">text_prompt</span>
-                  <span className="text-xs text-gray-400">（可手动微调）</span>
+              {/* 仅选中单个方案时显示可微调框；多选时每列使用各自方案的 cropHint */}
+              {selectedSuggestionIds.size <= 1 && (
+                <div className="mt-3">
+                  <div className="flex items-center gap-1.5 mb-1">
+                    <span className="text-xs text-gray-500 font-medium">text_prompt</span>
+                    <span className="text-xs text-gray-400">（可手动微调）</span>
+                  </div>
+                  <input
+                    type="text"
+                    value={cropHintForLab}
+                    onChange={(e) => setCropHintForLab(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg border border-gray-200 text-xs text-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-300 bg-gray-50"
+                    placeholder="e.g. the golden retriever sitting by the window with warm sunlight"
+                  />
                 </div>
-                <input
-                  type="text"
-                  value={cropHintForLab}
-                  onChange={(e) => setCropHintForLab(e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg border border-gray-200 text-xs text-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-300 bg-gray-50"
-                  placeholder="e.g. the golden retriever sitting by the window with warm sunlight"
-                />
-              </div>
+              )}
+              {selectedSuggestionIds.size > 1 && (
+                <div className="mt-3 space-y-2">
+                  <div className="text-xs text-gray-400 mb-1">
+                    已选 {selectedSuggestionIds.size} 个方案，每个方案独占一列对比 ↓
+                  </div>
+                  {cropSuggestions
+                    .filter((s) => selectedSuggestionIds.has(s.id))
+                    .map((s) => (
+                      <div key={s.id} className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5 space-y-1.5">
+                        <div className="flex items-center gap-1.5">
+                          <span>{s.emoji}</span>
+                          <span className="text-xs font-semibold text-gray-700">{s.title}</span>
+                        </div>
+                        <div>
+                          <span className="text-[10px] text-blue-500 font-medium mr-1.5">text_prompt</span>
+                          <span className="text-[10px] text-gray-600 break-all">{s.cropHint}</span>
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              )}
+
             </div>
           )}
 
-          {/* 风格化选项 */}
+          {/* 风格化选项（多选） */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">3. 风格化（可选）</label>
+            <label className="block text-sm font-medium text-gray-700 mb-2">3. 风格化（可选，可多选）</label>
             <div className="flex items-center gap-3 flex-wrap">
               <button
                 onClick={() => setWithStylize((v) => !v)}
@@ -548,13 +741,13 @@ export default function LabPage() {
               </button>
 
               {withStylize && (
-                <div className="flex gap-2">
+                <div className="flex gap-2 flex-wrap">
                   {STYLES.map((s) => (
                     <button
                       key={s.key}
-                      onClick={() => setSelectedStyle(s.key)}
+                      onClick={() => toggleStyle(s.key)}
                       className={`px-3 py-2 rounded-lg border-2 text-sm transition-all ${
-                        selectedStyle === s.key
+                        selectedStyles.has(s.key)
                           ? "border-purple-500 bg-purple-50 text-purple-700 font-medium"
                           : "border-gray-200 bg-white text-gray-600 hover:border-gray-300"
                       }`}
@@ -562,6 +755,11 @@ export default function LabPage() {
                       {s.emoji} {s.label}
                     </button>
                   ))}
+                  {selectedStyles.size > 1 && (
+                    <span className="self-center text-xs text-gray-400 ml-1">
+                      已选 {selectedStyles.size} 个风格，每列并发生成
+                    </span>
+                  )}
                 </div>
               )}
             </div>
@@ -574,28 +772,23 @@ export default function LabPage() {
             className="w-full py-3 rounded-xl font-semibold text-white transition-all disabled:opacity-40 disabled:cursor-not-allowed"
             style={{ background: running ? "#94a3b8" : "linear-gradient(135deg, #667eea 0%, #764ba2 100%)" }}
           >
-            {running ? "⏳ 运行中…" : (() => {
-              const allDone = Array.from(selectedModels).every((m) => results[m].removeBg.state === "done");
-              const pendingCount = Array.from(selectedModels).filter((m) => results[m].removeBg.state === "idle" || results[m].removeBg.state === "error").length;
-              if (allDone) return `🔄 重新全部跑 (${selectedModels.size} 个模型)`;
-              if (pendingCount === 0) return `✅ 已全部完成`;
-              const skipCount = selectedModels.size - pendingCount;
-              return `🚀 开始测试 (${pendingCount} 个模型${skipCount > 0 ? `，跳过 ${skipCount} 个已有结果` : ""}${withStylize ? " + 风格化" : ""})`;
-            })()}
+            {runBtnLabel}
           </button>
         </div>
 
         {/* ── 结果对比区 ── */}
-        <div className="flex gap-4 items-start">
-          {MODELS.map((m) => renderColumn(m.key))}
-        </div>
+        {displayKeys.length > 0 && (
+          <div className="flex gap-4 items-start overflow-x-auto pb-2">
+            {displayKeys.map((k) => renderColumn(k))}
+          </div>
+        )}
 
         {/* 说明 */}
         <div className="text-xs text-gray-400 bg-white rounded-xl border border-gray-100 px-4 py-3 space-y-1">
           <p>💡 <strong>BiRefNet</strong>：论文级高精度抠图，适合毛发细节丰富的宠物图，但较慢且费用稍高</p>
           <p>⚠️ <strong>rembg</strong>：轻量快速，但本轮测试主体缺失严重（猫身体大面积丢失），不推荐线上使用</p>
-          <p>💡 <strong>LangSAM</strong>：text_prompt 整段描述引导，单主体效果好，多主体局部场景不稳定（mask 全黑），自动降级到 BiRefNet</p>
-          <p>💡 风格化使用 Seedream 5.0（Volcano Ark），耗时约 20-40s，会消耗 ARK_API_KEY 额度</p>
+          <p>💡 <strong>LangSAM</strong>：支持多方案多选，每个方案独占一列并排对比。text_prompt 整段描述引导，自动降级到 BiRefNet</p>
+          <p>💡 风格化使用 Seedream 5.0（Volcano Ark），多选风格时并发生成，耗时约 20-40s，会消耗 ARK_API_KEY 额度</p>
           <p>⚠️ 此页面仅供内部测试，请勿分享地址</p>
         </div>
       </div>

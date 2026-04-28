@@ -68,12 +68,12 @@ async function toDataUrl(url: string, maxSide = 1024): Promise<string> {
  * 调用服务端 Seedream API 进行 AI 风格化（图生图）
  * @param imageUrl 抠图后的图片 URL（用于风格化的主图，白底合成后传给模型）
  * @param style 艺术风格
- * @param stylizeHint analyze-crop 返回的构图约束提示（品种、保留范围等），拼接到 prompt 防止裁剪
+ * @param cropHint analyze-crop 返回的统一提示词，同时用于抠图和风格化
  * @param originalImageUrl 原始上传图（可选），同时传给模型帮助理解完整身形
  * 失败时直接抛出错误，由 editor page 展示"失败 + 点击重试"
  * 通过串行队列防止并发请求导致 DNS/连接超时
  */
-export function stylize(imageUrl: string, style: ArtStyle, stylizeHint = "", originalImageUrl?: string): Promise<string> {
+export function stylize(imageUrl: string, style: ArtStyle, cropHint = "", originalImageUrl?: string): Promise<string> {
   return enqueue(async () => {
     // blob: URL 只在浏览器里有效，服务端无法访问，必须先转成 data: URL
     const dataUrl = await toDataUrl(imageUrl);
@@ -95,7 +95,7 @@ export function stylize(imageUrl: string, style: ArtStyle, stylizeHint = "", ori
         imageUrl: dataUrl,
         originalImageUrl: originalDataUrl,
         style,
-        stylizeHint,
+        cropHint,
       }),
     });
 

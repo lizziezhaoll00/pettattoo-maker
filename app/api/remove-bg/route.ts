@@ -320,6 +320,9 @@ export async function POST(req: NextRequest) {
       headers: {
         "Content-Type": "image/png",
         "Cache-Control": "no-store",
+        // 把实际使用的 text_prompt 回传给前端（Lab 调试用）
+        "x-text-prompt": model === "langsam" ? cropHint : "",
+        "Access-Control-Expose-Headers": "x-text-prompt",
       },
     });
   } catch (error) {

@@ -7,9 +7,8 @@ export interface CropSuggestion {
   id: string;
   title: string;
   desc: string;
+  /** 传给抠图模型和风格化模型的统一提示词 */
   cropHint: string;
-  /** 传给风格化模型的补充说明：宠物品种、抠图范围、构图建议等，防止风格化时裁剪/变形 */
-  stylizeHint: string;
 }
 
 function httpsPost(
@@ -48,13 +47,7 @@ const SYSTEM_PROMPT = `你是一位专业的宠物纹身贴构图顾问。用户
 - id: 英文简写标识（如 full_body / face_close / partial_scene）
 - title: 2-6字中文标题（如"完整身形"）
 - desc: 一句话用户说明（20字以内，说清楚抠什么、效果如何）
-- cropHint: 传给抠图模型的英文提示词（描述要保留哪些区域/元素，供分割模型参考）
-- stylizeHint: 传给 AI 风格化模型的补充说明（英文），包含：
-    1. 宠物的具体品种（如 "golden retriever"、"orange tabby cat"、"bichon frise"）
-    2. 本方案抠图保留的范围（如 "full body including tail"、"head and upper body"）
-    3. 重要构图约束（如 "keep the full silhouette, do not crop any body part"、"portrait orientation"）
-    4. 最终用途提示（固定加上："tattoo sticker design, keep all body parts intact"）
-    示例：stylizeHint: "Subject: golden retriever full body including tail. Keep the complete silhouette with all four legs and tail. Do not crop or cut off any body part. Tattoo sticker design, keep all body parts intact."
+- cropHint: 同时传给抠图模型和风格化模型的英文提示词，描述要保留哪些区域/元素
 
 分析维度：
 1. 照片中宠物的数量（单只还是多只）——注意：镜像、水面倒影、阴影等情况可能让同一只宠物看起来有多个，此时仍应视为1只
@@ -75,20 +68,31 @@ const SYSTEM_PROMPT = `你是一位专业的宠物纹身贴构图顾问。用户
 
 ⚠️ 镜像/倒影场景特别规则：
 - cropHint 中必须包含 "mirror reflection" 或 "glass reflection" 关键词，明确告知抠图模型需要保留倒影区域
-- 正确示例："Precise silhouette of the cat and its mirror reflection, both bodies, clean fur edges, transparent background"
+- 正确示例："tabby cat, mirror reflection, both bodies, ears, paws"
 - 错误示例：只写 "cat full body"（会导致倒影被裁掉）
 
-在 cropHint 中，请遵守以下规则：
-1. 必须包含宠物的具体种类名词（如 dog、cat、rabbit），不能只写部位（如只写 head 或 fur）
-2. 必须描述要保留的完整区域范围，不要只描述局部
-3. 强调边缘质量，例如 "Precise silhouette of the dog's face and upper body, clean curly fur edges, transparent background"
-4. 结尾始终加 "transparent background"
-5. 错误示例："cat's head, clear fur edges"（缺少整体范围、物种写了但范围太窄不稳定）
-6. 正确示例："Precise silhouette of the entire dog body, fluffy curly fur edges, transparent background"
+在 cropHint 中，请严格遵守以下规则（底层模型为 GroundingDINO，对名词/颜色敏感，不理解否定词）：
+
+✅ 编写公式：[具体品种/物种] + [显著颜色/花纹] + [核心身体部位] + [必须保留的道具]
+用半角逗号分隔，扁平列举，禁止长句和从句。
+
+五大约束：
+1. 【品种具体化】必须用精确品种，如 poodle、shiba inu、orange tabby cat，不能只写 dog 或 cat
+2. 【颜色锚点】必须包含毛色/花纹，如 orange and white fur、black and tan——颜色是区分主体与背景最有效的特征
+3. 【解剖学点名】必须显式列出末端部位：four paws、full tail、ears——只写 body 末端部位会被误判为背景
+4. 【拒绝否定词】禁止写 no background、exclude floor、without hands 等否定表达——写了 floor，模型就会去检测 floor
+5. 【结构扁平化】用逗号并列，禁止 "A poodle with a hat" 这类介词/从句结构
+6. 【局部方案强制】凡是只保留身体局部的方案（如大脸特写、半身、上半身等），必须在品种后紧接 "keep only"，再列举要保留的部位——格式为：[品种], keep only [部位列表]
+
+错误示例："Precise silhouette of the dog's face and upper body, clean curly fur edges, transparent background"
+正确示例（全身）："curly white poodle, face, ears, four paws, full tail"
+正确示例（局部）："orange tabby cat, keep only face, ears, whiskers"
+正确示例（半身）："golden retriever, keep only head, upper body, front paws"
+有道具示例："white poodle, round pet mat, four paws, curly fur, full tail"
 
 请严格返回 JSON 数组格式，不要有任何额外文字：
 [
-  { "id": "...", "title": "...", "desc": "...", "cropHint": "...", "stylizeHint": "..." },
+  { "id": "...", "title": "...", "desc": "...", "cropHint": "..." },
   ...
 ]`;
 
@@ -151,8 +155,7 @@ export async function POST(req: NextRequest) {
       id: s.id || `option_${i}`,
       title: s.title || "完整抠图",
       desc: s.desc || "保留宠物全身，去除背景",
-      cropHint: s.cropHint || "full body of pet, remove background completely",
-      stylizeHint: s.stylizeHint || "Pet full body. Keep the complete silhouette, do not crop any body part. Tattoo sticker design, keep all body parts intact.",
+      cropHint: s.cropHint || "pet, full body, four paws, complete tail, ears",
     }));
 
     return NextResponse.json({ suggestions });
@@ -169,22 +172,19 @@ function getDefaultSuggestions(): CropSuggestion[] {
       id: "full_body",
       title: "完整全身",
       desc: "保留四肢尾巴，构图完整自然",
-      cropHint: "Precise silhouette of the entire pet body including all four legs and tail, clean fur edges, transparent background",
-      stylizeHint: "Pet full body including all four legs and tail. Keep the complete silhouette, do not crop any body part. Tattoo sticker design, keep all body parts intact.",
+      cropHint: "pet, full body, four paws, complete tail, ears, clean fur",
     },
     {
       id: "face_close",
       title: "大脸特写",
       desc: "只保留头部，表情丰富更萌",
-      cropHint: "Precise silhouette of the pet's face and head, detailed ear and whisker edges, portrait crop, transparent background",
-      stylizeHint: "Pet face and head portrait. Keep the full head including ears. Tattoo sticker design, keep all body parts intact.",
+      cropHint: "pet, keep only head, face, ears, whiskers",
     },
     {
       id: "half_body",
       title: "半身坐姿",
       desc: "上半身+前爪，简洁可爱",
-      cropHint: "Precise silhouette of the pet's upper body and front paws, clean fur texture edges, sitting pose, transparent background",
-      stylizeHint: "Pet upper body and front paws, sitting pose. Keep the complete upper silhouette. Tattoo sticker design, keep all body parts intact.",
+      cropHint: "pet, keep only upper body, front paws, head, ears",
     },
   ];
 }
