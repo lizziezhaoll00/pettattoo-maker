@@ -2,9 +2,10 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useEditorStore, SIZE_CONFIG, SizeKey, ArtStyle } from "@/store/editorStore";
+import { useEditorStore, SIZE_CONFIG, SizeKey, ArtStyle, CropRect } from "@/store/editorStore";
 import { renderFinalCanvas } from "@/lib/canvas";
 import DownloadModal from "@/components/DownloadModal";
+import CropEditor from "@/components/CropEditor";
 import LoadingCat from "@/components/LoadingCat";
 import { stylize } from "@/lib/stylize";
 
@@ -18,7 +19,7 @@ const STYLE_CONFIGS: {
   previewImg?: string;
 }[] = [
   { key: "realistic",  label: "写实风", emoji: "📸", desc: "忠实还原主子颜值" },
-  { key: "lineart",    label: "素描风", emoji: "✏️", desc: "排线细节，复古蚀刻感",
+  { key: "lineart",    label: "线稿风", emoji: "✏️", desc: "排线细节，复古蚀刻感",
     previewImg: "https://images.unsplash.com/photo-1578662996442-48f60103fc96?w=300&q=80&sat=-100&con=50" },
   { key: "watercolor", label: "水彩风", emoji: "🎨", desc: "通透柔和，小红书款",
     previewImg: "https://images.unsplash.com/photo-1533738363-b7f9aef128ce?w=300&q=80" },
@@ -31,8 +32,8 @@ export default function EditorPage() {
   const {
     originalUrl, removedBgUrl, isRemoving, removeError,
     selectedBase, selectedArtStyle, stylizedUrls, isStylizing, stylizeErrors,
-    colorMode, showWhiteBorder, selectedSize,
-    setSelectedBase, setSelectedArtStyle, setColorMode, setShowWhiteBorder, setSelectedSize,
+    colorMode, showWhiteBorder, squareCrop, cropRect, selectedSize,
+    setSelectedBase, setSelectedArtStyle, setColorMode, setShowWhiteBorder, setSquareCrop, setCropRect, setSelectedSize,
     setStylizedUrl, setIsStylizing, setStylizeError,
   } = useEditorStore();
 
@@ -41,6 +42,7 @@ export default function EditorPage() {
   const [hoveredStyle, setHoveredStyle] = useState<StyleKey | null>(null);
   const [stylizeToast, setStylizeToast] = useState<string | null>(null);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [showCropEditor, setShowCropEditor] = useState(false);
 
   useEffect(() => {
     if (!originalUrl && !isRemoving) router.replace("/");
@@ -51,16 +53,19 @@ export default function EditorPage() {
       ? removedBgUrl
       : stylizedUrls[selectedArtStyle] || null;
 
+  // 用于裁切编辑器预览的源图（不含白边/滤镜）
+  const cropSourceUrl = activeImageUrl;
+
   useEffect(() => {
     if (!activeImageUrl) { setPreviewUrl(null); return; }
-    const needsCanvas = showWhiteBorder || colorMode === "bw";
+    const needsCanvas = showWhiteBorder || squareCrop || cropRect !== null || colorMode === "bw";
     if (!needsCanvas) { setPreviewUrl(activeImageUrl); return; }
     let cancelled = false;
-    renderFinalCanvas({ imageUrl: activeImageUrl, size: selectedSize, colorMode, showWhiteBorder, mirror: false, isRealistic: selectedBase === "realistic" })
+    renderFinalCanvas({ imageUrl: activeImageUrl, size: selectedSize, colorMode, showWhiteBorder, squareCrop, cropRect: cropRect ?? null, mirror: false, isRealistic: selectedBase === "realistic" })
       .then((canvas) => { if (!cancelled) setPreviewUrl(canvas.toDataURL("image/png")); })
       .catch(console.error);
     return () => { cancelled = true; };
-  }, [activeImageUrl, selectedSize, colorMode, showWhiteBorder, selectedBase]);
+  }, [activeImageUrl, selectedSize, colorMode, showWhiteBorder, squareCrop, cropRect, selectedBase]);
 
   const handleSelectStyle = async (key: StyleKey) => {
     if (key === "realistic") { setSelectedBase("realistic"); return; }
@@ -138,7 +143,7 @@ export default function EditorPage() {
                   className={`relative rounded-2xl border-2 overflow-hidden aspect-square transition-all ${isActive ? "border-amber-400 ring-2 ring-amber-200" : "border-gray-200 hover:border-amber-300"}`}
                 >
                   {cardUrl ? (
-                    <img src={cardUrl} alt={s.label} className="w-full h-full object-cover bg-white" style={s.key === "realistic" ? { filter: "brightness(1.1)" } : undefined} />
+                    <img src={cardUrl} alt={s.label} className="w-full h-full object-cover bg-white" style={s.key === "realistic" ? { filter: "brightness(1.1) saturate(1.15)" } : undefined} />
                   ) : loading ? (
                     <div className="w-full h-full flex flex-col items-center justify-center bg-gray-50 gap-1 px-1">
                       <span className="text-base animate-spin">✨</span>
@@ -199,6 +204,37 @@ export default function EditorPage() {
             </div>
             <div className="flex items-center justify-between px-4 py-3">
               <div>
+                <p className="text-sm font-medium text-gray-700">裁切范围</p>
+                <p className="text-xs text-gray-400">
+                  {cropRect ? `已设置（自定义范围）` : "自由拖拽调整构图"}
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                {cropRect && (
+                  <button
+                    type="button"
+                    onClick={() => setCropRect(null)}
+                    className="text-xs text-gray-400 hover:text-red-400 transition px-2 py-1 rounded-lg hover:bg-red-50"
+                  >
+                    清除
+                  </button>
+                )}
+                <button
+                  type="button"
+                  disabled={!activeImageUrl}
+                  onClick={() => setShowCropEditor(true)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-medium border transition ${
+                    cropRect
+                      ? "border-amber-400 bg-amber-50 text-amber-700"
+                      : "border-gray-200 text-gray-600 hover:border-amber-300 disabled:opacity-40"
+                  }`}
+                >
+                  ✂️ {cropRect ? "重新裁切" : "设置裁切"}
+                </button>
+              </div>
+            </div>
+            <div className="flex items-center justify-between px-4 py-3">
+              <div>
                 <p className="text-sm font-medium text-gray-700">黑白模式</p>
                 <p className="text-xs text-gray-400">高对比度黑白，适合单色纹身贴</p>
               </div>
@@ -230,7 +266,7 @@ export default function EditorPage() {
               style={{ backgroundImage: "linear-gradient(45deg,#e5e5e5 25%,transparent 25%),linear-gradient(-45deg,#e5e5e5 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#e5e5e5 75%),linear-gradient(-45deg,transparent 75%,#e5e5e5 75%)", backgroundSize: "16px 16px", backgroundPosition: "0 0,0 8px,8px -8px,-8px 0", backgroundColor: "#f5f5f5" }}>
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={previewUrl} alt="预览" className="max-h-96 max-w-full object-contain"
-                style={{ imageRendering: "auto", filter: (selectedBase === "realistic" && !showWhiteBorder && colorMode !== "bw") ? "brightness(1.1)" : undefined }} />
+                style={{ imageRendering: "auto", filter: (selectedBase === "realistic" && colorMode !== "bw") ? "brightness(1.1) saturate(1.15)" : undefined }} />
             </div>
             <p className="text-xs text-gray-400 text-center mt-2">预览为正常方向，导出时自动镜像翻转 🔄</p>
           </section>
@@ -244,6 +280,18 @@ export default function EditorPage() {
 
       {showDownloadModal && activeImageUrl && (
         <DownloadModal imageUrl={activeImageUrl} onClose={() => setShowDownloadModal(false)} />
+      )}
+
+      {showCropEditor && cropSourceUrl && (
+        <CropEditor
+          imageUrl={cropSourceUrl}
+          initialRect={cropRect ?? undefined}
+          onConfirm={(rect: CropRect) => {
+            setCropRect(rect);
+            setShowCropEditor(false);
+          }}
+          onCancel={() => setShowCropEditor(false)}
+        />
       )}
 
       {showResetConfirm && (

@@ -5,6 +5,14 @@ export type ArtStyle = "lineart" | "watercolor" | "cartoon";
 export type ColorMode = "color" | "bw";
 export type SizeKey = "S" | "M" | "L";
 
+/** 裁切区域，值为相对比例 0-1（相对于原图宽高） */
+export interface CropRect {
+  x: number; // 左边距比例
+  y: number; // 上边距比例
+  w: number; // 宽度比例
+  h: number; // 高度比例
+}
+
 export const SIZE_CONFIG: Record<SizeKey, { label: string; cm: number; px: number; desc: string }> = {
   S: { label: "S · 3cm", cm: 3, px: 354, desc: "手指、耳后" },
   M: { label: "M · 5cm", cm: 5, px: 591, desc: "手腕、脚踝" },
@@ -37,6 +45,8 @@ interface EditorState {
   selectedArtStyle: ArtStyle;
   colorMode: ColorMode;
   showWhiteBorder: boolean;
+  squareCrop: boolean;
+  cropRect: CropRect | null; // null = 不裁切
   selectedSize: SizeKey;
 
   // Actions
@@ -55,6 +65,8 @@ interface EditorState {
   setSelectedArtStyle: (v: ArtStyle) => void;
   setColorMode: (v: ColorMode) => void;
   setShowWhiteBorder: (v: boolean) => void;
+  setSquareCrop: (v: boolean) => void;
+  setCropRect: (rect: CropRect | null) => void;
   setSelectedSize: (v: SizeKey) => void;
   reset: () => void;
 }
@@ -76,6 +88,8 @@ const initialState = {
   selectedArtStyle: "lineart" as const,
   colorMode: "color" as const,
   showWhiteBorder: false,
+  squareCrop: false,
+  cropRect: null,
   selectedSize: "M" as const,
 };
 
@@ -102,6 +116,8 @@ export const useEditorStore = create<EditorState>((set) => ({
   setSelectedArtStyle: (v) => set({ selectedArtStyle: v }),
   setColorMode: (v) => set({ colorMode: v }),
   setShowWhiteBorder: (v) => set({ showWhiteBorder: v }),
+  setSquareCrop: (v) => set({ squareCrop: v }),
+  setCropRect: (rect) => set({ cropRect: rect }),
   setSelectedSize: (v) => set({ selectedSize: v }),
 
   reset: () => set(initialState),

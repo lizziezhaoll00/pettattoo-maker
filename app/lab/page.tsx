@@ -289,12 +289,24 @@ export default function LabPage() {
   const handleRun = async () => {
     if (!imageFile || running) return;
     setRunning(true);
-    // 重置结果
-    setResults({ birefnet: EMPTY_RESULT(), rembg: EMPTY_RESULT(), removebg: EMPTY_RESULT(), langsam: EMPTY_RESULT() });
+
+    // 只跑「没有结果」的模型，已有 done/error 结果的跳过，避免重复调用
+    const targets = Array.from(selectedModels).filter((m) => {
+      const col = results[m];
+      return col.removeBg.state === "idle" || col.removeBg.state === "error";
+    });
+
+    // 如果所有模型都已有结果，则全部重置后重跑（明确点击重跑的场景）
+    const allDone = Array.from(selectedModels).every(
+      (m) => results[m].removeBg.state === "done"
+    );
+    const actualTargets = allDone ? Array.from(selectedModels) : targets;
+    if (allDone) {
+      setResults({ birefnet: EMPTY_RESULT(), rembg: EMPTY_RESULT(), removebg: EMPTY_RESULT(), langsam: EMPTY_RESULT() });
+    }
 
     // 串行跑，避免同一账号并发触发 Replicate 429 限流
-    const targets = Array.from(selectedModels);
-    for (const m of targets) {
+    for (const m of actualTargets) {
       await runColumn(m, imageFile, withStylize, selectedStyle);
     }
     setRunning(false);
@@ -562,7 +574,14 @@ export default function LabPage() {
             className="w-full py-3 rounded-xl font-semibold text-white transition-all disabled:opacity-40 disabled:cursor-not-allowed"
             style={{ background: running ? "#94a3b8" : "linear-gradient(135deg, #667eea 0%, #764ba2 100%)" }}
           >
-            {running ? "⏳ 运行中…" : `🚀 开始测试 (${selectedModels.size} 个模型${withStylize ? " + 风格化" : ""})`}
+            {running ? "⏳ 运行中…" : (() => {
+              const allDone = Array.from(selectedModels).every((m) => results[m].removeBg.state === "done");
+              const pendingCount = Array.from(selectedModels).filter((m) => results[m].removeBg.state === "idle" || results[m].removeBg.state === "error").length;
+              if (allDone) return `🔄 重新全部跑 (${selectedModels.size} 个模型)`;
+              if (pendingCount === 0) return `✅ 已全部完成`;
+              const skipCount = selectedModels.size - pendingCount;
+              return `🚀 开始测试 (${pendingCount} 个模型${skipCount > 0 ? `，跳过 ${skipCount} 个已有结果` : ""}${withStylize ? " + 风格化" : ""})`;
+            })()}
           </button>
         </div>
 

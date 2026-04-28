@@ -118,7 +118,7 @@ export async function POST(req: NextRequest) {
 
     if (status !== 200) {
       console.error("[analyze-crop] API error:", status, rawData.slice(0, 300));
-      return NextResponse.json({ suggestions: getDefaultSuggestions() });
+      return NextResponse.json({ error: `AI 分析失败（${status}），请重试` }, { status: 500 });
     }
 
     const result = JSON.parse(rawData);
@@ -135,7 +135,7 @@ export async function POST(req: NextRequest) {
     }
 
     if (!suggestions || suggestions.length === 0) {
-      suggestions = getDefaultSuggestions();
+      return NextResponse.json({ error: "AI 未能识别照片内容，请换一张更清晰的宠物照片" }, { status: 422 });
     }
 
     suggestions = suggestions.slice(0, 3).map((s, i) => ({
@@ -148,7 +148,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ suggestions });
   } catch (error) {
     console.error("[analyze-crop]", error);
-    return NextResponse.json({ suggestions: getDefaultSuggestions() });
+    const msg = error instanceof Error ? error.message : "照片分析服务异常";
+    return NextResponse.json({ error: msg }, { status: 500 });
   }
 }
 

@@ -46,12 +46,21 @@ function compressForAnalysis(file: File, maxSize = 1024): Promise<Blob> {
   });
 }
 
-async function callRemoveBg(file: File, cropHint: string): Promise<string> {
+// 模型选择策略：
+//   有 cropHint → langsam（文本引导精准分割，AI 方案给出时必有 cropHint）
+//   无 cropHint → birefnet（高精度通用抠图，线上默认）
+//   removebg    → remove.bg 商业 API（KEY 已配置，可在服务端按需切换）
+async function callRemoveBg(
+  file: File,
+  cropHint: string
+): Promise<string> {
+  // 有 cropHint 时用 LangSAM（文本引导分割），让服务端按需降级
+  const model = cropHint ? "langsam" : "birefnet";
   const formData = new FormData();
   formData.append("image", file);
+  formData.append("model", model);
   if (cropHint) {
     formData.append("cropHint", cropHint);
-    formData.append("model", "langsam");
   }
   const res = await fetch("/api/remove-bg", { method: "POST", body: formData });
   if (!res.ok) {
@@ -62,21 +71,6 @@ async function callRemoveBg(file: File, cropHint: string): Promise<string> {
   return URL.createObjectURL(blob);
 }
 
-function SkeletonCards() {
-  return (
-    <div className="flex flex-col gap-3">
-      {[1, 2, 3].map((i) => (
-        <div key={i} className="flex items-center gap-3 p-4 rounded-2xl border border-gray-100 bg-gray-50 animate-pulse">
-          <div className="w-10 h-10 rounded-xl bg-gray-200 flex-shrink-0" />
-          <div className="flex-1 flex flex-col gap-2">
-            <div className="h-4 bg-gray-200 rounded w-24" />
-            <div className="h-3 bg-gray-200 rounded w-40" />
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
 
 function CropCard({
   suggestion,
@@ -152,6 +146,10 @@ export default function Uploader() {
         body: JSON.stringify({ imageDataUrl: dataUrl }),
       });
       const json = await res.json();
+      // 服务端报错时直接展示给用户，不再静默降级
+      if (!res.ok || json.error) {
+        throw new Error(json.error || "照片分析失败，请重试");
+      }
       const fetchedSuggestions: CropSuggestion[] = json.suggestions ?? [];
       setSuggestions(fetchedSuggestions);
       setCropSuggestions(fetchedSuggestions);
@@ -163,18 +161,12 @@ export default function Uploader() {
       setPhase("selecting");
     } catch (e) {
       console.error("[analyze-crop]", e);
-      const fallback: CropSuggestion[] = [
-        { id: "full_body", title: "完整全身", desc: "保留四肢尾巴，构图完整自然", cropHint: "Precise silhouette of the entire pet body including all four legs and tail, clean fur edges, transparent background" },
-        { id: "face_close", title: "大脸特写", desc: "只保留头部，表情丰富更萌", cropHint: "Precise silhouette of the pet's face and head, detailed ear and whisker edges, portrait crop, transparent background" },
-        { id: "half_body", title: "半身坐姿", desc: "上半身+前爪，简洁可爱", cropHint: "Precise silhouette of the pet's upper body and front paws, clean fur texture edges, sitting pose, transparent background" },
-      ];
-      setSuggestions(fallback);
-      setCropSuggestions(fallback);
-      setSelectedId("full_body");
-      setSelectedCropId("full_body");
-      setAnalyzeError("照片分析遇到问题，已给出通用方案供选择");
+      const errMsg = e instanceof Error ? e.message : "照片分析失败，请重试";
+      setError(errMsg);
+      setAnalyzeError(errMsg);
       setIsAnalyzing(false);
-      setPhase("selecting");
+      // 报错后回到 idle，让用户重新上传
+      setPhase("idle");
     }
   }, [reset, setOriginalFile, setIsAnalyzing, setAnalyzeError, setCropSuggestions, setSelectedCropId]);
 
@@ -237,6 +229,12 @@ export default function Uploader() {
 
       {phase === "idle" && (
         <>
+          {error && (
+            <div className="bg-red-50 border border-red-200 rounded-2xl p-3 text-sm text-red-600 text-center">
+              ❌ {error}
+              <button type="button" onClick={() => setError(null)} className="ml-2 text-red-400 hover:text-red-600 underline text-xs">关闭</button>
+            </div>
+          )}
           <div
             {...getRootProps()}
             className={`relative border-2 border-dashed rounded-3xl p-10 text-center cursor-pointer transition-all duration-200 select-none ${isDragActive ? "border-amber-400 bg-amber-50 scale-[1.02]" : "border-gray-300 bg-gray-50 hover:border-amber-400 hover:bg-amber-50"}`}
@@ -273,10 +271,7 @@ export default function Uploader() {
               <img src={previewUrl} alt="uploaded" className="max-w-full max-h-full object-contain" />
             </div>
           )}
-          <div className="bg-white rounded-2xl border border-gray-100 p-4">
-            <p className="text-xs font-semibold text-gray-400 mb-3">🐾 正在帮主子挑选最佳出道造型...</p>
-            <SkeletonCards />
-          </div>
+          <LoadingCat text="🐾 正在帮主子挑选最佳出道造型..." />
         </div>
       )}
 
@@ -329,18 +324,14 @@ export default function Uploader() {
               <img src={previewUrl} alt="uploaded" className="max-w-full max-h-full object-contain" />
             </div>
           )}
-          {selectedId && suggestions.length > 0 && (() => {
-            const chosen = suggestions.find((s) => s.id === selectedId);
-            return chosen ? (
-              <div className="bg-amber-50 border border-amber-200 rounded-2xl p-3 flex items-center gap-2 text-sm text-amber-700">
-                <span>正在按「{chosen.title}」方案勾勒毛孩子的灵魂轮廓…</span>
-              </div>
-            ) : null;
-          })()}
           {error && (
             <div className="bg-amber-50 border border-amber-200 rounded-2xl p-3 text-xs text-amber-700 text-center leading-relaxed">⏳ {error}</div>
           )}
-          <LoadingCat text="🐾 正在勾勒毛孩子的灵魂轮廓，稍等一下下" />
+          <LoadingCat text={
+            selectedId && suggestions.length > 0
+              ? `🐾 正在按「${suggestions.find((s) => s.id === selectedId)?.title ?? "你选的方案"}」勾勒毛孩子的灵魂轮廓…`
+              : "🐾 正在勾勒毛孩子的灵魂轮廓，稍等一下下"
+          } />
         </div>
       )}
     </div>

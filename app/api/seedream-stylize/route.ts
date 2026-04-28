@@ -8,11 +8,11 @@ type ArtStyle = "lineart" | "watercolor" | "cartoon";
 // 各风格对应的 Seedream prompt
 const STYLE_PROMPTS: Record<ArtStyle, string> = {
   lineart:
-    "将图中的宠物转化为专业转印就绪的细线纹身设计、使用细致的开阔排线和点刺来表现真实且适合皮肤的毛发质感、不使用过度密集的交叉排线、高对比度黑墨艺术、极简主义构图、具有明确粗细变化的干净轮廓、纯白背景隔离、高级纹身手稿审美。",
+    "将图中的宠物转化为专业转印就绪的细线纹身手稿。采用明确且富有粗细变化的墨黑线条，利用开阔的平行排线和细腻的点刺（stippling）表现毛发体积感，严禁使用密集的交叉网格排线。构图极简，重点刻画眼睛和鼻头的结构以还原神态。纯白背景隔离，具有高级的复古科学插画与矢量线条质感。高对比度黑墨艺术，高级纹身手稿审美。",
   watercolor:
-    "将图中的宠物转化为艺术水彩纹身设计、柔和通透的水彩、细腻的笔触纹理、轻盈的水彩晕染笔触、温柔可爱的插画风、纯白背景隔离、电影级光影、专业级数字水彩杰作。务必保留原图宠物的姿态/脸部/毛发特征。",
+    "将图中的宠物转化为艺术水彩纹身设计。采用虚实结合的手法：五官与主要轮廓使用柔和的细线固定，躯干毛发采用通透、半透明的水彩晕染。笔触轻盈灵动，伴有自然的艺术墨滴喷溅，色彩明快不脏。务必保留原图宠物的神态/脸部/毛发特征（尤其是眼睛的眼神光）。纯白背景隔离，整体呈现出电影级的光影氛围与高端艺术纸质感。",
   cartoon:
-    "将图中的宠物转化为高级萌系贴纸艺术风格，采用日系可爱萌系漫画审美，拥有大胆且粗厚的黑色墨水轮廓线，鲜艳的平涂赛璐珞阴影。夸张且富有灵气的眼睛，可爱的Q版比例。图案外圈带有一层干净的闭合白边，整体在纯白色背景上隔离。高端矢量艺术质感，边缘极其清晰干净，无杂乱线条，无阴影渐变，适合纹身贴纸印刷。",
+    "将图中的宠物转化为高级萌系贴纸艺术。采用日系Q版（Chibi）审美，夸张其灵动的眼神，缩小身体比例，捕捉性格精髓。拥有大胆且极其干净的闭合粗黑轮廓线，采用纯粹的平涂赛璐珞阴影（Flat cell shading），严禁任何形式的纹理或杂色。图案外圈带有一层均匀的、厚度约2px的闭合白边。纯白色背景，高端矢量艺术质感，边缘极其清晰干净，无杂乱线条，无阴影渐变，适合纹身贴纸印刷。",
 };
 
 /** 用 Node.js 原生 https/http 下载图片，自动跟随重定向（最多 5 次） */
@@ -153,18 +153,21 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "不支持的风格" }, { status: 400 });
     }
 
+    // 当前使用 doubao-seedream-4-5-251128（5.0 无免费额度，临时切换）
+    // 恢复 5.0 时改回 "doubao-seedream-5-0-260128"
+    // 4.5 与 5.0 参数完全相同：size="2K"（大写），response_format="url"
     const reqBody = JSON.stringify({
-      model: "doubao-seedream-5-0-260128",
+      model: "doubao-seedream-4-5-251128",
       prompt,
       image: imageBase64,
-      size: "1920x1920",          // 最小合法尺寸（≥ 3,686,400 像素）
-      output_format: "png",
-      response_format: "b64_json", // 直接返回 base64，避免跨域
-      watermark: false,
-      sequential_image_generation: "disabled",
+      size: "2K",                              // 4.5 / 5.0 均用大写枚举
+      response_format: "url",                  // 返回图片 URL，服务端再下载
+      sequential_image_generation: "disabled", // 生成单张图（非组图）
+      stream: false,
+      watermark: false,                        // 关闭水印
     });
 
-    console.log("[seedream-stylize] 开始调用 Seedream API，style:", style);
+    console.log("[seedream-stylize] 开始调用 Seedream 4.5 API，style:", style);
 
     // 用 Node.js 原生 https 发请求，避免 Next.js fetch polyfill 对大 body 的问题
     const { status, data: rawData } = await httpsPost(
@@ -200,7 +203,16 @@ export async function POST(req: NextRequest) {
     }
 
     console.log("[seedream-stylize] 成功，style:", style);
-    const dataUrl = `data:image/png;base64,${imageData.b64_json}`;
+
+    // response_format="url" 时返回图片 URL，用 Node.js https 下载后转 base64 返回给前端
+    // （前端是浏览器，不能直接访问火山 CDN；服务端中转避免跨域）
+    const imgUrl = imageData.url;
+    if (!imgUrl) {
+      return NextResponse.json({ error: "未返回图片 URL" }, { status: 500 });
+    }
+    const { data: imgBuf, contentType } = await downloadImage(imgUrl);
+    const b64 = imgBuf.toString("base64");
+    const dataUrl = `data:${contentType};base64,${b64}`;
     return NextResponse.json({ url: dataUrl });
   } catch (error) {
     console.error("[seedream-stylize]", error);

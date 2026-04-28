@@ -1,4 +1,23 @@
-import { ColorMode, SizeKey, SIZE_CONFIG } from "@/store/editorStore";
+import { ColorMode, CropRect, SizeKey, SIZE_CONFIG } from "@/store/editorStore";
+
+/**
+ * 把图片裁切成 1:1 方图（居中裁切，保留透明背景）
+ */
+function cropToSquare(img: HTMLImageElement | HTMLCanvasElement): HTMLCanvasElement {
+  const srcW = "naturalWidth" in img ? img.naturalWidth : img.width;
+  const srcH = "naturalWidth" in img ? img.naturalHeight : img.height;
+  const side = Math.min(srcW, srcH);
+  const offsetX = Math.round((srcW - side) / 2);
+  const offsetY = Math.round((srcH - side) / 2);
+
+  const canvas = document.createElement("canvas");
+  canvas.width = side;
+  canvas.height = side;
+  const ctx = canvas.getContext("2d")!;
+  // 透明背景，直接裁切中心区域
+  ctx.drawImage(img, offsetX, offsetY, side, side, 0, 0, side, side);
+  return canvas;
+}
 
 /**
  * 给图片加上白边描边
@@ -75,10 +94,12 @@ export function renderFinalCanvas(options: {
   size: SizeKey;
   colorMode: ColorMode;
   showWhiteBorder: boolean;
+  squareCrop: boolean;
+  cropRect: CropRect | null; // 自定义裁切区域（相对比例），优先级高于 squareCrop
   mirror: boolean; // 导出时为 true，预览时为 false
   isRealistic?: boolean; // 写实风时补光 brightness(1.1)
 }): Promise<HTMLCanvasElement> {
-  const { imageUrl, size, colorMode, showWhiteBorder, mirror, isRealistic = false } = options;
+  const { imageUrl, size, colorMode, showWhiteBorder, squareCrop, cropRect, mirror, isRealistic = false } = options;
   const targetPx = SIZE_CONFIG[size].px;
 
   return new Promise((resolve, reject) => {
@@ -86,7 +107,28 @@ export function renderFinalCanvas(options: {
     img.crossOrigin = "anonymous";
     img.onload = () => {
       // Step 1: 加白边（可选）
-      const sourceCanvas = showWhiteBorder ? addWhiteBorder(img) : null;
+      const borderedCanvas = showWhiteBorder ? addWhiteBorder(img) : null;
+      const afterBorder = borderedCanvas ?? img;
+
+      // Step 2: 裁切（优先用自定义 cropRect，次选 squareCrop 1:1 居中裁）
+      let sourceCanvas: HTMLCanvasElement | null = null;
+      if (cropRect) {
+        // 自定义裁切：相对比例转绝对像素
+        const bw = "naturalWidth" in afterBorder ? (afterBorder as HTMLImageElement).naturalWidth : (afterBorder as HTMLCanvasElement).width;
+        const bh = "naturalWidth" in afterBorder ? (afterBorder as HTMLImageElement).naturalHeight : (afterBorder as HTMLCanvasElement).height;
+        const sx = Math.round(cropRect.x * bw);
+        const sy = Math.round(cropRect.y * bh);
+        const sw = Math.round(cropRect.w * bw);
+        const sh = Math.round(cropRect.h * bh);
+        const cc = document.createElement("canvas");
+        cc.width = sw; cc.height = sh;
+        cc.getContext("2d")!.drawImage(afterBorder, sx, sy, sw, sh, 0, 0, sw, sh);
+        sourceCanvas = cc;
+      } else if (squareCrop) {
+        sourceCanvas = cropToSquare(afterBorder);
+      } else {
+        sourceCanvas = borderedCanvas;
+      }
       const sourceImg = sourceCanvas || img;
       const srcW = sourceCanvas ? sourceCanvas.width : img.naturalWidth;
       const srcH = sourceCanvas ? sourceCanvas.height : img.naturalHeight;
@@ -109,7 +151,7 @@ export function renderFinalCanvas(options: {
       // - 写实风时补光 brightness(1.1)，无论是否开白边（保证亮度一致）
       // - 黑白模式时增强对比度
       const filters: string[] = [];
-      if (isRealistic) filters.push("brightness(1.1)");
+      if (isRealistic) filters.push("brightness(1.1) saturate(1.15)");
       if (colorMode === "bw") filters.push("grayscale(1) contrast(1.4)");
       ctx.filter = filters.length > 0 ? filters.join(" ") : "none";
 

@@ -17,7 +17,7 @@ const TIPS = [
 ];
 
 export default function DownloadModal({ onClose, imageUrl }: DownloadModalProps) {
-  const { selectedSize, colorMode, showWhiteBorder, selectedBase } = useEditorStore();
+  const { selectedSize, colorMode, showWhiteBorder, squareCrop, cropRect, selectedBase } = useEditorStore();
   const [loading, setLoading] = useState(false);
 
   const handleDownload = async () => {
@@ -28,6 +28,8 @@ export default function DownloadModal({ onClose, imageUrl }: DownloadModalProps)
         size: selectedSize,
         colorMode,
         showWhiteBorder,
+        squareCrop,
+        cropRect: cropRect ?? null,
         mirror: true,
         isRealistic: selectedBase === "realistic",
       });
@@ -77,6 +79,12 @@ export default function DownloadModal({ onClose, imageUrl }: DownloadModalProps)
             <span>镜像</span>
             <span className="font-medium text-green-600">✅ 已自动翻转</span>
           </div>
+          {squareCrop && (
+            <div className="flex justify-between mt-1">
+              <span>裁切</span>
+              <span className="font-medium text-amber-600">✂️ 1:1 方图</span>
+            </div>
+          )}
         </div>
         <div className="px-6 pb-6 flex gap-3">
           <button onClick={onClose} className="flex-1 py-3 rounded-2xl border border-gray-200 text-gray-600 text-sm font-medium hover:bg-gray-50 transition-colors">再看看</button>
