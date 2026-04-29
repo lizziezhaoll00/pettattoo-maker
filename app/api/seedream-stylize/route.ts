@@ -196,9 +196,31 @@ export async function POST(req: NextRequest) {
       outline: "outline-refs",
     };
 
-    // 参考图：仅在本地开发环境读取（Vercel Serverless 不打包 public/ 参考图目录，
-    // 且多图 base64 会显著增大请求体，在 Vercel→北京链路上容易导致超时）
-    let styleRefBase64s: string[] = [];
+    // 参考图 URL（GitHub Raw，公开可访问，生产/本地均可用）
+    // 文件已提交到 GitHub 仓库 public/*-refs/ 目录，Seedream 直接通过 URL 读取，无需 base64
+    const GITHUB_RAW = "https://raw.githubusercontent.com/lizziezhaoll00/pettattoo-maker/main/public";
+    const STYLE_REFS_URLS: Record<ArtStyle, string[]> = {
+      lineart:    [], // 暂无参考图
+      watercolor: [
+        `${GITHUB_RAW}/watercolor-refs/ref1.png`,
+        `${GITHUB_RAW}/watercolor-refs/ref2.jpg`,
+        `${GITHUB_RAW}/watercolor-refs/ref3.png`,
+      ],
+      cartoon:    [], // 暂无参考图
+      kawaii:     [
+        `${GITHUB_RAW}/kawaii-refs/1.jpg`,
+        `${GITHUB_RAW}/kawaii-refs/2.jpg`,
+        `${GITHUB_RAW}/kawaii-refs/3.jpg`,
+      ],
+      outline:    [
+        `${GITHUB_RAW}/outline-refs/ref1.png`,
+        `${GITHUB_RAW}/outline-refs/ref2.png`,
+        `${GITHUB_RAW}/outline-refs/ref3.png`,
+      ],
+    };
+
+    // 本地开发：用本地文件 base64（可离线调试）；生产环境：用 GitHub Raw URL（直接传 URL，无需 base64 编码）
+    let styleRefImages: string[] = [];
     if (process.env.NODE_ENV === "development") {
       const refsDir = path.join(process.cwd(), "public", STYLE_REFS_DIR[style]);
       try {
@@ -209,20 +231,21 @@ export async function POST(req: NextRequest) {
         for (const file of files) {
           const buf = fs.readFileSync(path.join(refsDir, file));
           const ext = path.extname(file).slice(1).toLowerCase().replace("jpg", "jpeg");
-          styleRefBase64s.push(`data:image/${ext};base64,${buf.toString("base64")}`);
+          styleRefImages.push(`data:image/${ext};base64,${buf.toString("base64")}`);
         }
-        console.log(`[seedream-stylize] 本地开发：${style} 参考图加载 ${styleRefBase64s.length} 张`);
+        console.log(`[seedream-stylize] 本地：${style} 参考图 ${styleRefImages.length} 张（base64）`);
       } catch {
-        console.log(`[seedream-stylize] 本地开发：${style} 无参考图`);
+        console.log(`[seedream-stylize] 本地：${style} 无参考图`);
       }
     } else {
-      console.log(`[seedream-stylize] 生产环境：跳过参考图（减少 body 体积，降低超时风险）`);
+      styleRefImages = STYLE_REFS_URLS[style] ?? [];
+      console.log(`[seedream-stylize] 生产：${style} 参考图 ${styleRefImages.length} 张（GitHub Raw URL）`);
     }
 
-    // 图片数组组装：[...参考图(仅本地), 原图(可选), 抠图主图]
+    // 图片数组组装：[...参考图, 原图(可选), 抠图主图]
     const imageField = (() => {
       const arr: string[] = [
-        ...styleRefBase64s,
+        ...styleRefImages,
         ...(originalBase64 ? [originalBase64] : []),
         imageBase64,
       ];
