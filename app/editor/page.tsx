@@ -213,15 +213,18 @@ export default function EditorPage() {
                     <div className="absolute top-1.5 right-1.5 w-4 h-4 bg-amber-400 rounded-full flex items-center justify-center text-white text-[10px] shadow z-10">✓</div>
                   )}
                   {/* 重新生成按钮：已有结果 & 非写实风 & 未在生成中 */}
+                  {/* 注意：不能用 <button>，因为外层已是 <button>（button 不能嵌套 button，会导致 hydration error） */}
                   {s.key !== "realistic" && cardUrl && !loading && (
-                    <button
-                      type="button"
+                    <div
+                      role="button"
+                      tabIndex={0}
                       title="重新生成"
                       onClick={(e) => handleRegenStyle(e, s.key as ArtStyle)}
-                      className="absolute top-1.5 left-1.5 w-5 h-5 bg-black/40 hover:bg-black/65 rounded-full flex items-center justify-center text-white text-[11px] shadow z-10 transition-colors"
+                      onKeyDown={(e) => e.key === "Enter" && handleRegenStyle(e as unknown as React.MouseEvent, s.key as ArtStyle)}
+                      className="absolute top-1.5 left-1.5 w-5 h-5 bg-black/40 hover:bg-black/65 rounded-full flex items-center justify-center text-white text-[11px] shadow z-10 transition-colors cursor-pointer"
                     >
                       🔄
-                    </button>
+                    </div>
                   )}
                 </button>
               );
