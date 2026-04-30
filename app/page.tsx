@@ -479,7 +479,7 @@ export default function Home() {
                       <div style={{ position: "relative", zIndex: 1, maxHeight: "calc(100vh - 200px)", overflow: "hidden", borderRadius: 18 }}>
                         <BeforeAfterSlider key={activeKey ?? ""} beforeUrl={originalUrl} afterUrl={activeImageUrl} />
                         {/* hover 时显示的重新生成覆盖层 - 在图片内部 */}
-                        {generationResults[activeKey]?.status !== "pending" && (
+                        {activeKey && generationResults[activeKey]?.status !== "pending" && (
                           <div className={`regen-hover-layer${regenKey === activeKey ? " open" : ""}`} style={{ position: "absolute", inset: 0, zIndex: 4, opacity: 0, transition: "opacity 0.2s", pointerEvents: "none", borderRadius: 18, overflow: "hidden", display: "flex", flexDirection: "column", justifyContent: "flex-end" }}>
                             {regenKey === activeKey ? (
                               <div style={{ pointerEvents: "auto", margin: "0 14px 14px", background: "rgba(255,255,255,0.96)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", borderRadius: 14, border: "1px solid rgba(235,228,218,0.9)", padding: "10px 12px", display: "flex", alignItems: "center", gap: 8, boxShadow: "0 4px 20px rgba(0,0,0,0.12)" }}>
@@ -520,7 +520,7 @@ export default function Home() {
                         )}
                       </div>
                     ) : (
-                      <div style={{ aspectRatio: "5/6", background: "#F5F0EB", borderRadius: 16, display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 12, position: "relative", zIndex: 1 }}>
+                      <div style={{ height: "calc(100vh - 200px)", background: "#F5F0EB", borderRadius: 16, display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 12, position: "relative", zIndex: 1 }}>
                         <svg style={{ animation: "spin 1.2s linear infinite" }} width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#F29C6B" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
                         <span style={{ fontSize: 13, color: "#9ca3af" }}>AI 正在生成手稿…</span>
                       </div>
