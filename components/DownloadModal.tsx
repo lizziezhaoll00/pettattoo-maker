@@ -9,6 +9,8 @@ interface DownloadModalProps {
   imageUrl: string;
   /** 原始抠图 URL（透明 PNG，不含风格化），用于一键下载时附带 */
   originalUrl?: string;
+  /** 宠物名字，用于文件名 */
+  petName?: string;
 }
 
 const TIPS = [
@@ -20,13 +22,13 @@ const TIPS = [
 
 const ALL_SIZES: SizeKey[] = ["S", "M", "L"];
 
-export default function DownloadModal({ onClose, imageUrl, originalUrl }: DownloadModalProps) {
+export default function DownloadModal({ onClose, imageUrl, petName }: DownloadModalProps) {
   const { colorMode, showWhiteBorder, squareCrop, cropRect, selectedBase } = useEditorStore();
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState("");
 
   /** 渲染单个尺寸并下载 */
-  async function downloadOneSize(size: SizeKey, url: string, suffix: string) {
+  async function downloadOneSize(size: SizeKey, url: string) {
     const canvas = await renderFinalCanvas({
       imageUrl: url,
       size,
@@ -38,41 +40,21 @@ export default function DownloadModal({ onClose, imageUrl, originalUrl }: Downlo
       isRealistic: selectedBase === "realistic",
     });
     const blob = await canvasToBlob(canvas);
-    downloadBlob(blob, `pettattoo_${SIZE_CONFIG[size].cm}cm${suffix}_mirror.png`);
+    const namePart = petName ? `_${petName}` : "";
+    downloadBlob(blob, `pettattoo${namePart}_${SIZE_CONFIG[size].cm}cm_mirror.png`);
   }
 
-  /** 下载原始最高画质抠图（不套滤镜/白边/尺寸限制，保留透明 PNG 原始分辨率） */
-  async function downloadOriginal(url: string) {
-    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
-      const i = new Image();
-      i.crossOrigin = "anonymous";
-      i.onload = () => resolve(i);
-      i.onerror = reject;
-      i.src = url;
-    });
-    const canvas = document.createElement("canvas");
-    canvas.width = img.naturalWidth;
-    canvas.height = img.naturalHeight;
-    canvas.getContext("2d")!.drawImage(img, 0, 0);
-    const blob = await canvasToBlob(canvas);
-    downloadBlob(blob, `pettattoo_original_hq.png`);
-  }
 
   const handleDownloadAll = async () => {
     setLoading(true);
     try {
-      // 1. 下载所有三个尺寸（当前风格图）
+      // 下载所有三个尺寸（当前风格图）
       for (const size of ALL_SIZES) {
         setProgress(`正在导出 ${SIZE_CONFIG[size].label}…`);
-        await downloadOneSize(size, imageUrl, "");
+        await downloadOneSize(size, imageUrl);
         // 浏览器对短时间内多次下载可能有拦截，稍微错开
         await new Promise((r) => setTimeout(r, 300));
       }
-
-      // 2. 下载原始高画质抠图（如果有）
-      const srcForOriginal = originalUrl ?? imageUrl;
-      setProgress("正在导出原始高画质抠图…");
-      await downloadOriginal(srcForOriginal);
 
       setProgress("");
       onClose();
@@ -117,10 +99,6 @@ export default function DownloadModal({ onClose, imageUrl, originalUrl }: Downlo
                 <span className="font-medium text-gray-700">{SIZE_CONFIG[size].desc} · 已镜像</span>
               </div>
             ))}
-            <div className="flex justify-between border-t border-gray-200 mt-1 pt-1">
-              <span>原始高画质抠图</span>
-              <span className="font-medium text-amber-600">透明 PNG · 最高画质</span>
-            </div>
           </div>
           <div className="flex justify-between mt-2 border-t border-gray-100 pt-2">
             <span>镜像</span>

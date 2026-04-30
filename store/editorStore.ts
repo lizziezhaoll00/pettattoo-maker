@@ -1,33 +1,44 @@
 import { create } from "zustand";
-import type { CropSuggestion } from "@/app/api/analyze-crop/route";
 
-/** TattooScheme 扩展 CropSuggestion，附加 schemes 页旧版字段（可选，保持向后兼容） */
-export type TattooScheme = CropSuggestion & {
-  tattooPrompt?: string;
-  styleEmoji?: string;
-  poseDesc?: string;
-  bodyPart?: string;
-  size?: string;
-};
+// ─── 风格类型 ───────────────────────────────────────────────
+/** V2.9：10 种风格 key */
+export type StyleKey =
+  | "watercolor"
+  | "outline"
+  | "cartoon"
+  | "kawaii"
+  | "lineart"
+  | "realism"
+  | "neotraditional"
+  | "embroidery"
+  | "geometric"
+  | "dotwork";
 
-/** schemes 页旧版方案生成状态 */
-export type SchemeGenState = "idle" | "generating" | "done" | "error";
-export interface SchemeResult {
-  state: SchemeGenState;
-  url?: string;
-  error?: string;
-}
+export const ALL_STYLE_KEYS: StyleKey[] = [
+  "watercolor",
+  "outline",
+  "cartoon",
+  "kawaii",
+  "lineart",
+  "realism",
+  "neotraditional",
+  "embroidery",
+  "geometric",
+  "dotwork",
+];
 
-export type ArtStyle = "lineart" | "watercolor" | "cartoon" | "kawaii" | "outline";
+/** 向后兼容旧代码引用的 ArtStyle（与 StyleKey 等价） */
+export type ArtStyle = StyleKey;
+
 export type ColorMode = "color" | "bw";
 export type SizeKey = "S" | "M" | "L";
 
 /** 裁切区域，值为相对比例 0-1（相对于原图宽高） */
 export interface CropRect {
-  x: number; // 左边距比例
-  y: number; // 上边距比例
-  w: number; // 宽度比例
-  h: number; // 高度比例
+  x: number;
+  y: number;
+  w: number;
+  h: number;
 }
 
 export const SIZE_CONFIG: Record<SizeKey, { label: string; cm: number; px: number; desc: string }> = {
@@ -36,125 +47,193 @@ export const SIZE_CONFIG: Record<SizeKey, { label: string; cm: number; px: numbe
   L: { label: "L · 8cm", cm: 8, px: 945, desc: "锁骨、小臂" },
 };
 
+// ─── 部位 ─────────────────────────────────────────────────
+export type BodyPart =
+  | "finger"
+  | "hand"
+  | "wrist"
+  | "ankle"
+  | "collarbone"
+  | "shoulder"
+  | "forearm"
+  | "upperarm";
+
+export const BODY_PART_CONFIG: Record<
+  BodyPart,
+  { label: string; recommendedSize: SizeKey }
+> = {
+  finger:     { label: "手指",    recommendedSize: "S" },
+  hand:       { label: "手背",    recommendedSize: "S" },
+  wrist:      { label: "手腕",    recommendedSize: "M" },
+  ankle:      { label: "脚踝",    recommendedSize: "M" },
+  collarbone: { label: "锁骨",    recommendedSize: "M" },
+  shoulder:   { label: "肩部",    recommendedSize: "L" },
+  forearm:    { label: "前臂",    recommendedSize: "L" },
+  upperarm:   { label: "上臂",    recommendedSize: "L" },
+};
+
+export const ALL_BODY_PARTS = Object.keys(BODY_PART_CONFIG) as BodyPart[];
+
+// ─── 各风格生成结果 ───────────────────────────────────────
+export type GenStatus = "idle" | "pending" | "done" | "error";
+
+export interface GenResult {
+  status: GenStatus;
+  url?: string;   // data URL（成功时）
+  error?: string; // 错误信息（失败时）
+}
+
+// ─── 页面 phase ────────────────────────────────────────────
+export type AppPhase = "upload" | "style" | "waiting" | "done";
+
+// ─── Store 接口 ───────────────────────────────────────────
 interface EditorState {
-  // 原始上传图片
+  // ── phase 管理 ──
+  phase: AppPhase;
+  setPhase: (p: AppPhase) => void;
+
+  // ── 宠物名字 ──
+  petName: string;
+  setPetName: (name: string) => void;
+
+  // ── 原始上传图片 ──
   originalFile: File | null;
   originalUrl: string | null;
+  setOriginalFile: (file: File, url: string) => void;
 
-  // BiRefNet 抠图结果
+  // ── 后台静默抠图 ──
+  /** 抠图状态 */
+  bgRemoveStatus: "idle" | "pending" | "done" | "error";
+  bgRemoveError: string | null;
   removedBgUrl: string | null;
-  isRemoving: boolean;
-  removeError: string | null;
+  setBgRemoveStatus: (s: "idle" | "pending" | "done" | "error") => void;
+  setBgRemoveError: (e: string | null) => void;
+  setRemovedBgUrl: (url: string) => void;
 
-  // AI 分析阶段（上传后方案选择）
-  tattooSchemes: TattooScheme[];
-  isAnalyzing: boolean;
-  analyzeError: string | null;
-  selectedSchemeId: string | null;
-  /** 选中方案的统一提示词（抠图+风格化共用） */
-  selectedCropHint: string;
+  // ── 选中的风格（最多 3 种） ──
+  selectedStyles: StyleKey[];
+  setSelectedStyles: (styles: StyleKey[]) => void;
+  toggleStyle: (key: StyleKey) => void;
 
-  // schemes 页兼容字段（旧流程，保留防止编译报错）
-  schemeResults: Record<string, SchemeResult>;
+  // ── 生成结果（按风格 key 索引） ──
+  generationResults: Record<StyleKey, GenResult>;
+  setGenResult: (key: StyleKey, result: GenResult) => void;
+  retryGen: (key: StyleKey) => void; // 仅重置为 pending，触发重试由外部负责
 
-  // 编辑器内风格选择
-  /** "realistic" = 直接用抠图原图；"art" = 用 stylizedUrls[selectedArtStyle] */
-  selectedBase: "realistic" | "art";
-  selectedArtStyle: ArtStyle;
+  // ── 当前在结果页查看的风格 key ──
+  currentStyleKey: StyleKey | null;
+  setCurrentStyleKey: (key: StyleKey | null) => void;
 
-  /** 各艺术风格的生成结果 URL（key = ArtStyle） */
-  stylizedUrls: Record<ArtStyle, string | null>;
-  /** 各风格是否正在生成 */
-  isStylizing: Record<ArtStyle, boolean>;
-  /** 各风格的报错信息 */
-  stylizeErrors: Record<ArtStyle, string | null>;
+  // ── 部位选择（等待页可选） ──
+  selectedBodyParts: BodyPart[];
+  toggleBodyPart: (part: BodyPart) => void;
 
-  // 编辑器内精调选项
+  // ── 尺寸 ──
+  selectedSize: SizeKey;
+  setSelectedSize: (v: SizeKey) => void;
+
+  // ── 旧版兼容字段（供 DownloadModal / canvas lib 用） ──
   colorMode: ColorMode;
   showWhiteBorder: boolean;
   squareCrop: boolean;
   cropRect: CropRect | null;
-  selectedSize: SizeKey;
+  selectedBase: "realistic" | "art";
+  selectedArtStyle: ArtStyle;
+  isRemoving: boolean; // alias for bgRemoveStatus==='pending'
 
-  // Actions
-  setOriginalFile: (file: File, url: string) => void;
-  setRemovedBgUrl: (url: string) => void;
-  setIsRemoving: (v: boolean) => void;
-  setRemoveError: (e: string | null) => void;
-  setTattooSchemes: (schemes: TattooScheme[]) => void;
-  setIsAnalyzing: (v: boolean) => void;
-  setAnalyzeError: (e: string | null) => void;
-  setSelectedSchemeId: (id: string | null) => void;
-  setSelectedCropHint: (hint: string) => void;
-  setSchemeResult: (id: string, result: SchemeResult) => void;
-  setSelectedBase: (v: "realistic" | "art") => void;
-  setSelectedArtStyle: (v: ArtStyle) => void;
-  setStylizedUrl: (style: ArtStyle, url: string) => void;
-  clearStylizedUrl: (style: ArtStyle) => void;
-  setIsStylizing: (style: ArtStyle, v: boolean) => void;
-  setStylizeError: (style: ArtStyle, e: string | null) => void;
-  setColorMode: (v: ColorMode) => void;
-  setShowWhiteBorder: (v: boolean) => void;
-  setSquareCrop: (v: boolean) => void;
-  setCropRect: (rect: CropRect | null) => void;
-  setSelectedSize: (v: SizeKey) => void;
+  // ── reset ──
   reset: () => void;
 }
 
-const ART_STYLES: ArtStyle[] = ["lineart", "watercolor", "cartoon", "kawaii", "outline"];
+const initialGenerationResults = Object.fromEntries(
+  ALL_STYLE_KEYS.map((k) => [k, { status: "idle" as GenStatus }])
+) as Record<StyleKey, GenResult>;
+
+/** 过滤掉旧版本遗留的、当前不再支持的 StyleKey（防浏览器缓存崩溃） */
+function filterValidStyles(styles: string[]): StyleKey[] {
+  return styles.filter((k): k is StyleKey => ALL_STYLE_KEYS.includes(k as StyleKey));
+}
 
 const initialState = {
+  phase: "upload" as AppPhase,
+  petName: "",
   originalFile: null,
   originalUrl: null,
+  bgRemoveStatus: "idle" as const,
+  bgRemoveError: null,
   removedBgUrl: null,
-  isRemoving: false,
-  removeError: null,
-  tattooSchemes: [],
-  isAnalyzing: false,
-  analyzeError: null,
-  selectedSchemeId: null,
-  selectedCropHint: "",
-  schemeResults: {},
-  selectedBase: "realistic" as const,
-  selectedArtStyle: "lineart" as ArtStyle,
-  stylizedUrls: Object.fromEntries(ART_STYLES.map((s) => [s, null])) as Record<ArtStyle, string | null>,
-  isStylizing: Object.fromEntries(ART_STYLES.map((s) => [s, false])) as Record<ArtStyle, boolean>,
-  stylizeErrors: Object.fromEntries(ART_STYLES.map((s) => [s, null])) as Record<ArtStyle, string | null>,
-  colorMode: "color" as const,
+  selectedStyles: [] as StyleKey[],
+  generationResults: initialGenerationResults,
+  currentStyleKey: null as StyleKey | null,
+  selectedBodyParts: [] as BodyPart[],
+  selectedSize: "M" as SizeKey,
+  // 旧版兼容
+  colorMode: "color" as ColorMode,
   showWhiteBorder: false,
   squareCrop: false,
   cropRect: null,
-  selectedSize: "M" as const,
+  selectedBase: "art" as "realistic" | "art",
+  selectedArtStyle: "watercolor" as ArtStyle,
+  isRemoving: false,
 };
 
-export const useEditorStore = create<EditorState>((set) => ({
+export const useEditorStore = create<EditorState>((set, get) => ({
   ...initialState,
 
+  setPhase: (p) => set({ phase: p }),
+  setPetName: (name) => set({ petName: name }),
+
   setOriginalFile: (file, url) => set({ originalFile: file, originalUrl: url }),
-  setRemovedBgUrl: (url) => set({ removedBgUrl: url }),
-  setIsRemoving: (v) => set({ isRemoving: v }),
-  setRemoveError: (e) => set({ removeError: e }),
-  setTattooSchemes: (schemes) => set({ tattooSchemes: schemes }),
-  setIsAnalyzing: (v) => set({ isAnalyzing: v }),
-  setAnalyzeError: (e) => set({ analyzeError: e }),
-  setSelectedSchemeId: (id) => set({ selectedSchemeId: id }),
-  setSelectedCropHint: (hint) => set({ selectedCropHint: hint }),
-  setSchemeResult: (id, result) =>
-    set((s) => ({ schemeResults: { ...s.schemeResults, [id]: result } })),
-  setSelectedBase: (v) => set({ selectedBase: v }),
-  setSelectedArtStyle: (v) => set({ selectedArtStyle: v }),
-  setStylizedUrl: (style, url) =>
-    set((s) => ({ stylizedUrls: { ...s.stylizedUrls, [style]: url } })),
-  clearStylizedUrl: (style) =>
-    set((s) => ({ stylizedUrls: { ...s.stylizedUrls, [style]: null } })),
-  setIsStylizing: (style, v) =>
-    set((s) => ({ isStylizing: { ...s.isStylizing, [style]: v } })),
-  setStylizeError: (style, e) =>
-    set((s) => ({ stylizeErrors: { ...s.stylizeErrors, [style]: e } })),
-  setColorMode: (v) => set({ colorMode: v }),
-  setShowWhiteBorder: (v) => set({ showWhiteBorder: v }),
-  setSquareCrop: (v) => set({ squareCrop: v }),
-  setCropRect: (rect) => set({ cropRect: rect }),
+
+  setBgRemoveStatus: (s) => set({ bgRemoveStatus: s, isRemoving: s === "pending" }),
+  setBgRemoveError: (e) => set({ bgRemoveError: e }),
+  setRemovedBgUrl: (url) => set({ removedBgUrl: url, bgRemoveStatus: "done", isRemoving: false }),
+
+  setSelectedStyles: (styles) =>
+    set({ selectedStyles: filterValidStyles(styles).slice(0, 3) }),
+  toggleStyle: (key) => {
+    const { selectedStyles } = get();
+    // 先过滤旧 key，再操作
+    const valid = filterValidStyles(selectedStyles);
+    if (valid.includes(key)) {
+      set({ selectedStyles: valid.filter((k) => k !== key) });
+    } else if (valid.length < 3) {
+      set({ selectedStyles: [...valid, key] });
+    }
+    // 已选 3 种时忽略新增
+  },
+
+  setGenResult: (key, result) =>
+    set((s) => ({
+      generationResults: { ...s.generationResults, [key]: result },
+    })),
+
+  retryGen: (key) =>
+    set((s) => ({
+      generationResults: {
+        ...s.generationResults,
+        [key]: { status: "pending" },
+      },
+    })),
+
+  setCurrentStyleKey: (key) => set({ currentStyleKey: key }),
+
+  toggleBodyPart: (part) => {
+    const { selectedBodyParts } = get();
+    if (selectedBodyParts.includes(part)) {
+      set({ selectedBodyParts: selectedBodyParts.filter((p) => p !== part) });
+    } else {
+      set({ selectedBodyParts: [...selectedBodyParts, part] });
+    }
+  },
+
   setSelectedSize: (v) => set({ selectedSize: v }),
-  reset: () => set(initialState),
+
+  reset: () =>
+    set({
+      ...initialState,
+      generationResults: Object.fromEntries(
+        ALL_STYLE_KEYS.map((k) => [k, { status: "idle" as GenStatus }])
+      ) as Record<StyleKey, GenResult>,
+    }),
 }));

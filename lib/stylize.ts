@@ -1,25 +1,9 @@
-import { ArtStyle } from "@/store/editorStore";
-
-/**
- * 简单串行队列：同时只允许一个 Seedream 请求在飞行，防止并发导致 DNS/连接超时
- */
-let stylizeQueue: Promise<void> = Promise.resolve();
-
-function enqueue<T>(task: () => Promise<T>): Promise<T> {
-  const result = stylizeQueue.then(task);
-  // 把队列推进，忽略错误（错误由 result 的调用方处理）
-  stylizeQueue = result.then(
-    () => {},
-    () => {}
-  );
-  return result;
-}
+import { StyleKey } from "@/store/editorStore";
 
 /**
  * 把任意图片 URL（包括 blob:）在浏览器端转成 data: URL
  * - 背景策略：先铺纯白，再叠一层极淡灰色边框辅助（仅覆盖透明区域）
  *   → 白猫毛发在白底上渲染为白色（正确），Seedream 通过整体构图识别主体
- *   → 之前用 #e8e8e8 全面铺底，导致白猫/浅色猫咪半透明毛发区域被染灰
  * - 等比压缩至最长边 ≤ 1024px（防止 body 超过 Vercel 4.5MB 限制）
  * 服务端 Node.js 无法访问 blob: URL，需要在发请求前先转换
  */
@@ -66,46 +50,50 @@ async function toDataUrl(url: string, maxSide = 1024): Promise<string> {
 
 /**
  * 调用服务端 Seedream API 进行 AI 风格化（图生图）
+ * V2.9：移除串行队列，支持多路并行调用
+ *
  * @param imageUrl 抠图后的图片 URL（用于风格化的主图，白底合成后传给模型）
- * @param style 艺术风格
- * @param cropHint analyze-crop 返回的统一提示词，同时用于抠图和风格化
- * @param originalImageUrl 原始上传图（可选），同时传给模型帮助理解完整身形
- * 失败时直接抛出错误，由 editor page 展示"失败 + 点击重试"
- * 通过串行队列防止并发请求导致 DNS/连接超时
+ * @param style 艺术风格 key
+ * @param originalImageUrl 原始上传图（可选），传给模型帮助理解完整身形
+ * @param petName 宠物名字（可选），仅 kawaii 风格带入 prompt
+ * 失败时直接抛出错误，由调用方展示"失败 + 点击重试"
  */
-export function stylize(imageUrl: string, style: ArtStyle, cropHint = "", originalImageUrl?: string): Promise<string> {
-  return enqueue(async () => {
-    // blob: URL 只在浏览器里有效，服务端无法访问，必须先转成 data: URL
-    const dataUrl = await toDataUrl(imageUrl);
+export async function stylize(
+  imageUrl: string,
+  style: StyleKey,
+  originalImageUrl?: string,
+  petName?: string
+): Promise<string> {
+  // blob: URL 只在浏览器里有效，服务端无法访问，必须先转成 data: URL
+  const dataUrl = await toDataUrl(imageUrl);
 
-    // 原图（如果有）也转换，确保服务端可访问
-    let originalDataUrl: string | undefined;
-    if (originalImageUrl) {
-      try {
-        originalDataUrl = await toDataUrl(originalImageUrl, 1024);
-      } catch {
-        // 原图转换失败不影响主流程
-      }
+  // 原图（如果有）也转换，确保服务端可访问
+  let originalDataUrl: string | undefined;
+  if (originalImageUrl) {
+    try {
+      originalDataUrl = await toDataUrl(originalImageUrl, 1024);
+    } catch {
+      // 原图转换失败不影响主流程
     }
+  }
 
-    const res = await fetch("/api/seedream-stylize", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        imageUrl: dataUrl,
-        originalImageUrl: originalDataUrl,
-        style,
-        cropHint,
-      }),
-    });
-
-    if (!res.ok) {
-      const { error } = await res.json().catch(() => ({ error: "未知错误" }));
-      throw new Error(error || `请求失败 ${res.status}`);
-    }
-
-    const { url } = await res.json();
-    if (!url) throw new Error("未返回图片 URL");
-    return url;
+  const res = await fetch("/api/seedream-stylize", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      imageUrl: dataUrl,
+      originalImageUrl: originalDataUrl,
+      style,
+      petName,
+    }),
   });
+
+  if (!res.ok) {
+    const { error } = await res.json().catch(() => ({ error: "未知错误" }));
+    throw new Error(error || `请求失败 ${res.status}`);
+  }
+
+  const { url } = await res.json();
+  if (!url) throw new Error("未返回图片 URL");
+  return url;
 }

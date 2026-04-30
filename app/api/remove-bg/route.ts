@@ -77,7 +77,7 @@ async function replicatePredict(body: object): Promise<string> {
   }
   if (prediction.status === "failed") {
     console.error("[remove-bg] Replicate failed:", prediction.error);
-    throw new Error("抠图失败，请重试");
+    throw new Error(`抠图失败：${prediction.error ?? "未知错误"}`);
   }
 
   // 轮询（最多 30 次 × 2s = 60s）
@@ -93,7 +93,7 @@ async function replicatePredict(body: object): Promise<string> {
     if (pollData.status === "succeeded") return pollData.output as string;
     if (pollData.status === "failed") {
       console.error("[remove-bg] Replicate poll failed:", pollData.error);
-      throw new Error("抠图失败，请重试");
+      throw new Error(`抠图失败：${pollData.error ?? "未知错误"}`);
     }
   }
   throw new Error("抠图超时，请重试");
@@ -106,31 +106,37 @@ async function replicatePredict(body: object): Promise<string> {
 /**
  * rembg（lucataco/remove-bg）：轻量快速，Lab 备用
  * 警告：双宠同框主体缺失严重，不推荐线上使用
+ * 使用 SDK Blob 直传，SDK 自动上传到 Replicate Files 并获得 URL
  */
-async function runRembg(dataUrl: string): Promise<Buffer> {
-  const outputUrl = await replicatePredict({
-    version: "fb8af171cfa1616ddcf1242c093f9c46bcada5ad4cf6f2fbe8b81b330ec5c003",
-    input: { image: dataUrl },
-  });
-  const imgRes = await fetch(outputUrl);
-  if (!imgRes.ok) throw new Error("结果图片获取失败");
-  const rawBuffer = Buffer.from(await imgRes.arrayBuffer());
-  return rawBuffer;
+async function runRembg(imgBuffer: Buffer, mimeType: string): Promise<Buffer> {
+  const replicate = new Replicate({ auth: process.env.REPLICATE_API_TOKEN });
+  const imageBlob = new Blob([new Uint8Array(imgBuffer)], { type: mimeType });
+  const output = await replicate.run(
+    "lucataco/remove-bg:95fcc2a26d3899cd6c2691c900465aaeff466285a65c14638cc5f36f34befaf1",
+    { input: { image: imageBlob } }
+  );
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const resultBlob = await (output as any).blob();
+  return Buffer.from(await resultBlob.arrayBuffer());
 }
 
 /**
  * BiRefNet（men1scus/birefnet）：高精度通用抠图，线上默认
  * A100 80GB，CAAI AIR 2024 论文级，Lab 横评验证效果最优
+ * 使用 SDK Blob 直传，SDK 自动上传到 Replicate Files 并获得 URL
  */
-async function runBiRefNet(dataUrl: string): Promise<Buffer> {
-  const outputUrl = await replicatePredict({
-    version: "f74986db0355b58403ed20963af156525e2891ea3c2d499bfbfb2a28cd87c5d7",
-    input: { image: dataUrl },
-  });
-  const imgRes = await fetch(outputUrl);
-  if (!imgRes.ok) throw new Error("结果图片获取失败");
-  const rawBuffer = Buffer.from(await imgRes.arrayBuffer());
-  return rawBuffer;
+async function runBiRefNet(imgBuffer: Buffer, mimeType: string): Promise<Buffer> {
+  const replicate = new Replicate({ auth: process.env.REPLICATE_API_TOKEN });
+  const imageBlob = new Blob([new Uint8Array(imgBuffer)], { type: mimeType });
+  console.log("[remove-bg] BiRefNet SDK run, blob size:", imageBlob.size);
+  const output = await replicate.run(
+    "men1scus/birefnet:f74986db0355b58403ed20963af156525e2891ea3c2d499bfbfb2a28cd87c5d7",
+    { input: { image: imageBlob } }
+  );
+  // SDK 返回 FileOutput（ReadableStream），调 .blob() 读取二进制
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const resultBlob = await (output as any).blob();
+  return Buffer.from(await resultBlob.arrayBuffer());
 }
 
 /**
@@ -269,24 +275,26 @@ export async function POST(req: NextRequest) {
     }
 
     const arrayBuffer = await file.arrayBuffer();
-    const base64 = Buffer.from(arrayBuffer).toString("base64");
+    const imgBuffer = Buffer.from(arrayBuffer);
     const mimeType = file.type || "image/jpeg";
-    const dataUrl = `data:${mimeType};base64,${base64}`;
 
-    // 模型路由：前端已按 cropHint 决策好模型，服务端直接执行
-    //   有 cropHint → langsam（文本引导精准分割）
-    //   无 cropHint → birefnet（高精度通用，线上默认）
-    //   removebg   → remove.bg 商业 API（已配置 KEY，额度充足时可选）
-    //   rembg      → Replicate rembg（Lab 备用）
+    // 模型路由：
+    //   有 cropHint → langsam（文本引导精准分割，Replicate）
+    //   无 cropHint → removebg（remove.bg 商业 API，~4s，线上默认）
+    //                 removebg 失败 → birefnet 降级（Replicate，~16s）
+    //                 birefnet OOM → rembg 降级（Replicate，~12s）
+    //   birefnet   → 手动指定 BiRefNet（Lab 用）
+    //   rembg      → 手动指定 rembg（Lab 备用）
+    // remove.bg 免费额度：50次/月（本地开发），生产需升级套餐
     const model = modelParam;
 
-    console.log(`[remove-bg] model=${model}, cropHint="${cropHint.slice(0, 60)}"`);
+    console.log(`[remove-bg] model=${model}, size=${imgBuffer.length}B, cropHint="${cropHint.slice(0, 60)}"`);
 
     let cleanedBuffer: Buffer;
 
     switch (model) {
       case "rembg":
-        cleanedBuffer = await runRembg(dataUrl);
+        cleanedBuffer = await runRembg(imgBuffer, mimeType);
         break;
 
       case "removebg":
@@ -297,7 +305,7 @@ export async function POST(req: NextRequest) {
         // cropHint 为空时不应走到这里（前端已处理），保险起见降级
         if (!cropHint) {
           console.log("[remove-bg] LangSAM cropHint 为空，降级到 BiRefNet");
-          cleanedBuffer = await runBiRefNet(dataUrl);
+          cleanedBuffer = await runBiRefNet(imgBuffer, mimeType);
         } else {
           try {
             cleanedBuffer = await runLangSAM(arrayBuffer, mimeType, cropHint);
@@ -305,14 +313,49 @@ export async function POST(req: NextRequest) {
             // LangSAM 依赖 Replicate Files API 上传，在某些网络环境下会 fetch failed
             // 自动降级到 BiRefNet，保证主流程不中断
             console.warn("[remove-bg] LangSAM 失败，降级到 BiRefNet:", langsamErr);
-            cleanedBuffer = await runBiRefNet(dataUrl);
+            cleanedBuffer = await runBiRefNet(imgBuffer, mimeType);
           }
         }
         break;
 
       case "birefnet":
+        // 手动指定 BiRefNet（Lab 调试用），OOM 时降级到 rembg
+        try {
+          cleanedBuffer = await runBiRefNet(imgBuffer, mimeType);
+        } catch (birefnetErr) {
+          const errMsg = birefnetErr instanceof Error ? birefnetErr.message : "";
+          const isOOM = errMsg.includes("out of memory") || errMsg.includes("CUDA") || errMsg.includes("OOM");
+          if (isOOM) {
+            console.warn("[remove-bg] BiRefNet OOM，降级到 rembg:", errMsg.slice(0, 80));
+            cleanedBuffer = await runRembg(imgBuffer, mimeType);
+          } else {
+            throw birefnetErr;
+          }
+        }
+        break;
+
       default:
-        cleanedBuffer = await runBiRefNet(dataUrl);
+        // 默认：remove.bg（~4s，商业 API 无 cold start）
+        //   → 失败时降级到 BiRefNet（~16s）
+        //   → BiRefNet OOM 再降级到 rembg（~12s）
+        try {
+          cleanedBuffer = await runRemoveBgApi(arrayBuffer, mimeType);
+          console.log("[remove-bg] remove.bg 成功");
+        } catch (removebgErr) {
+          console.warn("[remove-bg] remove.bg 失败，降级到 BiRefNet:", (removebgErr as Error).message?.slice(0, 80));
+          try {
+            cleanedBuffer = await runBiRefNet(imgBuffer, mimeType);
+          } catch (birefnetErr) {
+            const errMsg = birefnetErr instanceof Error ? birefnetErr.message : "";
+            const isOOM = errMsg.includes("out of memory") || errMsg.includes("CUDA") || errMsg.includes("OOM");
+            if (isOOM) {
+              console.warn("[remove-bg] BiRefNet OOM，降级到 rembg:", errMsg.slice(0, 80));
+              cleanedBuffer = await runRembg(imgBuffer, mimeType);
+            } else {
+              throw birefnetErr;
+            }
+          }
+        }
         break;
     }
 
@@ -320,14 +363,21 @@ export async function POST(req: NextRequest) {
       headers: {
         "Content-Type": "image/png",
         "Cache-Control": "no-store",
-        // 把实际使用的 text_prompt 回传给前端（Lab 调试用）
         "x-text-prompt": model === "langsam" ? cropHint : "",
         "Access-Control-Expose-Headers": "x-text-prompt",
       },
     });
   } catch (error) {
     console.error("[remove-bg]", error);
-    const msg = error instanceof Error ? error.message : "抠图服务异常";
+    // 对用户只展示简短的错误信息，不暴露技术细节
+    const raw = error instanceof Error ? error.message : "抠图服务异常";
+    const msg = raw.includes("CUDA") || raw.includes("out of memory")
+      ? "抠图服务暂时繁忙，请稍后重试"
+      : raw.includes("超时")
+      ? "抠图超时，请重试"
+      : raw.includes("失败") || raw.includes("error")
+      ? "抠图失败，请重试"
+      : raw.slice(0, 60); // 截断长错误
     return NextResponse.json({ error: msg }, { status: 500 });
   }
 }
