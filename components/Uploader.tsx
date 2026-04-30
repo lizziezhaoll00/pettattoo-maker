@@ -132,7 +132,7 @@ export default function Uploader({ onUploaded, isGenerating = false, hideHeader 
         {!hideHeader && (
           <div style={{ textAlign: "center", padding: "28px 24px 36px", maxWidth: 1440, margin: "0 auto", boxSizing: "border-box" }}>
             <h1 className="font-serif-sc" style={{ fontSize: "clamp(32px, 4vw, 52px)", fontWeight: 900, color: "#1A1818", lineHeight: 1.2, marginBottom: 14, letterSpacing: "0.06em" }}>
-              把对它的爱，化作永恒符号
+              把对它的爱，化作身体的印记
             </h1>
             <p style={{ color: "#8A817C", fontSize: 15, margin: "0 auto", lineHeight: 1.75, maxWidth: 560 }}>
               上传一张清晰的照片，我们将结合 AI 魔法，为你生成独一无二的专属纹身手稿。
