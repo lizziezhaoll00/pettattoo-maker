@@ -7,15 +7,15 @@ export const STYLE_CONFIGS: Record<
   StyleKey,
   { label: string; desc: string; previewImg: string }
 > = {
-  watercolor:     { label: "水彩晕染",   desc: "通透浪漫｜色彩晕染｜灵动如梦",         previewImg: "https://images.unsplash.com/photo-1508672019048-805c876b67e2?w=300&q=70" },
-  outline:        { label: "极简单线",   desc: "一笔勾勒｜留白极简｜低调优雅",         previewImg: "https://images.unsplash.com/photo-1577175889968-f551f5944abd?w=300&q=70" },
-  cartoon:        { label: "插画卡通",   desc: "萌感爆表｜Q版卡通｜活泼可爱",         previewImg: "https://images.unsplash.com/photo-1514888286974-6c03e2ca1dba?w=300&q=70" },
-  kawaii:         { label: "萌系贴纸",   desc: "日韩手绘｜糖果色系｜治愈满分",         previewImg: "https://images.unsplash.com/photo-1518791841217-8f162f1912da?w=300&q=70" },
-  lineart:        { label: "素描手绘",   desc: "铅笔质感｜交叉排线｜艺术范儿",         previewImg: "https://images.unsplash.com/photo-1583511655826-05700d52f4d9?w=300&q=70" },
-  realism:        { label: "微写实",     desc: "毛发毕现｜眼神传神｜像照片一样真",     previewImg: "https://images.unsplash.com/photo-1548199973-03cce0bbc87b?w=300&q=70" },
-  neotraditional: { label: "美式新传统", desc: "浓郁配色｜花卉装饰｜华丽宠物肖像",     previewImg: "https://images.unsplash.com/photo-1561037404-61cd46aa615b?w=300&q=70" },
-  geometric:      { label: "几何解构",   desc: "半写实半多边形｜现代感极强",           previewImg: "https://images.unsplash.com/photo-1526336024174-e58f5cdd8e13?w=300&q=70" },
-  dotwork:        { label: "点刺肌理",   desc: "疏密点阵｜颗粒磨砂｜静谧高级感",       previewImg: "https://images.unsplash.com/photo-1601758228041-f3b2795255f1?w=300&q=70" },
+  watercolor:     { label: "水彩晕染风",   desc: "通透浪漫｜色彩晕染｜灵动如梦",       previewImg: "/style-previews/watercolor.png" },
+  outline:        { label: "极简单线风",   desc: "一笔勾勒｜留白极简｜低调优雅",       previewImg: "/style-previews/outline.jpeg" },
+  cartoon:        { label: "插画卡通风",   desc: "萌感爆表｜Q版卡通｜活泼可爱",       previewImg: "/style-previews/cartoon.png" },
+  kawaii:         { label: "萌系贴纸风",   desc: "日韩手绘｜糖果色系｜治愈满分",       previewImg: "/style-previews/kawaii.png" },
+  lineart:        { label: "素描手绘风",   desc: "铅笔质感｜交叉排线｜艺术范儿",       previewImg: "/style-previews/lineart.png" },
+  realism:        { label: "微写实风",     desc: "毛发毕现｜眼神传神｜像照片一样真",   previewImg: "/style-previews/realism.png" },
+  neotraditional: { label: "美式新传统",   desc: "浓郁配色｜华丽花卉｜复古肖像",       previewImg: "/style-previews/neotraditional.png" },
+  geometric:      { label: "几何解构风",   desc: "半写实半多边形｜现代感极强",         previewImg: "/style-previews/geometric.png" },
+  dotwork:        { label: "点刺肌理风",   desc: "疏密点阵｜颗粒磨砂｜静谧高级感",     previewImg: "/style-previews/dotwork.png" },
 };
 
 export default function StyleGrid() {
