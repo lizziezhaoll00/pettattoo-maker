@@ -1,7 +1,5 @@
 import https from "https";
 import http from "http";
-import fs from "fs";
-import path from "path";
 import { NextRequest, NextResponse } from "next/server";
 
 export const maxDuration = 60;
@@ -184,16 +182,9 @@ export async function POST(req: NextRequest) {
     // --- 1. 准备主图（抠图后，白底合成）base64 ---
     const imageBase64 = await toBase64DataUrl(imageUrl);
 
-    // --- 2. 准备原图（可选）base64 ---
-    let originalBase64: string | null = null;
-    if (originalImageUrl) {
-      try {
-        originalBase64 = await toBase64DataUrl(originalImageUrl);
-      } catch (e) {
-        // 原图加载失败不影响主流程，降级为单图
-        console.warn("[seedream-stylize] 原图加载失败，降级单图模式:", (e as Error).message);
-      }
-    }
+    // --- 2. 原图（已不使用，只传抠图主图给 Seedream）---
+    void originalImageUrl; // 保留参数接收，不再处理
+    const originalBase64: string | null = null;
 
     // --- 3. 拼接 prompt ---
     const stylePrompt = STYLE_PROMPTS[style];
@@ -212,13 +203,8 @@ export async function POST(req: NextRequest) {
         .replace(/「My Baby」/g, `「${name}」`);
     }
 
-    // V2.9 不再使用 cropHint，原图仅作辅助参考
-    const originalImageNote = originalBase64
-      ? " The original photo is for reference only to help restore any missing body parts — do not introduce its background or any unlisted element."
-      : "";
-    const prompt = originalImageNote
-      ? `${finalStylePrompt}${originalImageNote}`
-      : finalStylePrompt;
+    // 只使用风格 prompt，不附加原图说明
+    const prompt = finalStylePrompt;
 
     // --- 4. 构建请求体（支持多图：参考图 + 原图 + 抠图主图） ---
     // 每种风格从对应的 refs 目录加载本地参考图（public/<style>-refs/）
@@ -262,38 +248,11 @@ export async function POST(req: NextRequest) {
       dotwork:        [], // 暂无参考图
     };
 
-    // 本地开发：用本地文件 base64（可离线调试）；生产环境：用 GitHub Raw URL（直接传 URL，无需 base64 编码）
-    let styleRefImages: string[] = [];
-    if (process.env.NODE_ENV === "development") {
-      const refsDir = path.join(process.cwd(), "public", STYLE_REFS_DIR[style]);
-      try {
-        const files = fs.readdirSync(refsDir)
-          .filter((f) => /\.(jpe?g|png|webp)$/i.test(f))
-          .sort()
-          .slice(0, 3);
-        for (const file of files) {
-          const buf = fs.readFileSync(path.join(refsDir, file));
-          const ext = path.extname(file).slice(1).toLowerCase().replace("jpg", "jpeg");
-          styleRefImages.push(`data:image/${ext};base64,${buf.toString("base64")}`);
-        }
-        console.log(`[seedream-stylize] 本地：${style} 参考图 ${styleRefImages.length} 张（base64）`);
-      } catch {
-        console.log(`[seedream-stylize] 本地：${style} 无参考图`);
-      }
-    } else {
-      styleRefImages = STYLE_REFS_URLS[style] ?? [];
-      console.log(`[seedream-stylize] 生产：${style} 参考图 ${styleRefImages.length} 张（GitHub Raw URL）`);
-    }
-
-    // 图片数组组装：[...参考图, 原图(可选), 抠图主图]
-    const imageField = (() => {
-      const arr: string[] = [
-        ...styleRefImages,
-        ...(originalBase64 ? [originalBase64] : []),
-        imageBase64,
-      ];
-      return arr.length === 1 ? arr[0] : arr;
-    })();
+    // 只传抠图主图，不传风格示意图和原图
+    void STYLE_REFS_DIR;
+    void STYLE_REFS_URLS;
+    void originalBase64;
+    const imageField = imageBase64;
 
     // 当前使用 doubao-seedream-4-0-250828（4.5 无免费额度，切换到 4.0）
     // 恢复高版本时改回对应 model id
