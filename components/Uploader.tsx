@@ -46,16 +46,17 @@ export function UploaderCTA({ onStartMagic, isGenerating = false }: UploaderCTAP
   const { originalUrl, selectedStyles } = useEditorStore();
   const canStart = !!originalUrl && selectedStyles.length > 0 && !isGenerating;
   return (
-    <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 200, background: "rgba(253,251,248,0.97)", backdropFilter: "blur(28px)", WebkitBackdropFilter: "blur(28px)", borderTop: "1px solid rgba(235,228,218,0.9)", boxShadow: "0 -4px 32px rgba(0,0,0,0.08), 0 -1px 0 rgba(255,255,255,0.6)", padding: "12px 0 16px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16 }}>
+    <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 200, background: "rgba(253,251,248,0.97)", backdropFilter: "blur(28px)", WebkitBackdropFilter: "blur(28px)", borderTop: "1px solid rgba(235,228,218,0.9)", boxShadow: "0 -4px 32px rgba(0,0,0,0.08), 0 -1px 0 rgba(255,255,255,0.6)", padding: "10px 0 14px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16 }}>
       {/* 内容限宽 + 内边距，与主体对齐 */}
-      <div style={{ width: "100%", maxWidth: 1440, margin: "0 auto", padding: "0 56px", boxSizing: "border-box", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16 }}>
-      <p style={{ margin: 0, fontSize: 12, color: "#9CA3AF", display: "flex", alignItems: "center", gap: 5, flexShrink: 0 }}>
+      <div className="cta-inner" style={{ width: "100%", maxWidth: 1440, margin: "0 auto", padding: "0 56px", boxSizing: "border-box", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16 }}>
+      <p className="cta-hint" style={{ margin: 0, fontSize: 12, color: "#9CA3AF", display: "flex", alignItems: "center", gap: 5, flexShrink: 0 }}>
         <span style={{ opacity: 0.6 }}>🛡</span> 由 Gemini 驱动，照片加密保护仅用于本次生成。
       </p>
       <button
         onClick={canStart ? onStartMagic : undefined}
         disabled={!canStart}
-        style={{ position: "relative", overflow: "hidden", background: isGenerating ? "#1A1818" : canStart ? "#1A1818" : "#C8BEB4", color: "#fff", padding: "14px 44px", borderRadius: 999, border: "none", fontSize: 15, fontWeight: 700, cursor: canStart ? "pointer" : "not-allowed", display: "flex", alignItems: "center", gap: 10, letterSpacing: "0.01em", boxShadow: (canStart || isGenerating) ? "0 8px 28px rgba(26,24,24,0.22)" : "none", transition: "all 0.2s", flexShrink: 0, opacity: isGenerating ? 0.9 : 1 }}
+        className="cta-btn"
+        style={{ position: "relative", overflow: "hidden", background: isGenerating ? "#1A1818" : canStart ? "#1A1818" : "#C8BEB4", color: "#fff", padding: "13px 32px", borderRadius: 999, border: "none", fontSize: 15, fontWeight: 700, cursor: canStart ? "pointer" : "not-allowed", display: "flex", alignItems: "center", gap: 10, letterSpacing: "0.01em", boxShadow: (canStart || isGenerating) ? "0 8px 28px rgba(26,24,24,0.22)" : "none", transition: "all 0.2s", flexShrink: 0, opacity: isGenerating ? 0.9 : 1 }}
         onMouseEnter={e => { if (canStart) { (e.currentTarget as HTMLButtonElement).style.transform = "translateY(-1px)"; (e.currentTarget as HTMLButtonElement).style.boxShadow = "0 12px 32px rgba(26,24,24,0.3)"; } }}
         onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.transform = "none"; (e.currentTarget as HTMLButtonElement).style.boxShadow = (canStart || isGenerating) ? "0 8px 28px rgba(26,24,24,0.22)" : "none"; }}
       >
@@ -140,7 +141,7 @@ export default function Uploader({ onUploaded, isGenerating = false, hideHeader 
         )}
 
         {/* ── 主工作区：轻薄毛玻璃背板，收拢视线 ── */}
-        <div style={{ maxWidth: 1440, margin: "0 auto", padding: "0 56px", boxSizing: "border-box" }}>
+        <div className="uploader-wrap" style={{ maxWidth: 1440, margin: "0 auto", padding: "0 56px", boxSizing: "border-box" }}>
           {/* 背板 */}
           <div style={{ background: "rgba(255,255,255,0.40)", backdropFilter: "blur(16px)", WebkitBackdropFilter: "blur(16px)", borderRadius: 28, border: "1px solid rgba(235,228,218,0.55)", boxShadow: "0 4px 40px rgba(0,0,0,0.04)", padding: "36px 40px 40px" }}>
           <div className="uploader-split" style={{ display: "grid", gridTemplateColumns: "5fr 7fr", gap: 48, alignItems: "start" }}>
@@ -289,9 +290,13 @@ export default function Uploader({ onUploaded, isGenerating = false, hideHeader 
         @media (max-width: 880px) {
           .uploader-split { grid-template-columns: 1fr !important; gap: 32px !important; }
         }
-        @media (max-width: 640px) {
-          header, .uploader-split { padding-left: 20px !important; padding-right: 20px !important; }
-          .uploader-cta-btn { flex: 1 !important; justify-content: center; }
+        @media (max-width: 767px) {
+          .uploader-wrap { padding: 0 12px !important; }
+          .cta-inner { padding: 0 12px !important; gap: 10px !important; }
+          .cta-hint { display: none !important; }
+          .cta-btn { flex: 1 !important; justify-content: center !important; padding: 13px 16px !important; font-size: 14px !important; }
+          .uploader-split { gap: 20px !important; }
+          .style-grid-3col { grid-template-columns: 1fr 1fr !important; gap: 10px !important; }
         }
       `}</style>
     </div>

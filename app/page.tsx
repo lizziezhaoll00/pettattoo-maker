@@ -98,8 +98,8 @@ function StepHeader({ currentStep, onReset }: { currentStep: 1 | 2 | 3; onReset?
   ] as const;
 
   return (
-    <header style={{
-      maxWidth: 1440, margin: "0 auto", padding: "20px 56px",
+    <header className="step-header" style={{
+      maxWidth: 1440, margin: "0 auto", padding: "14px 56px",
       display: "flex", justifyContent: "space-between", alignItems: "center",
       boxSizing: "border-box",
       background: "rgba(255,255,255,0.38)",
@@ -107,43 +107,44 @@ function StepHeader({ currentStep, onReset }: { currentStep: 1 | 2 | 3; onReset?
       borderRadius: 20, borderBottom: "1px solid rgba(235,228,218,0.5)",
     }}>
       {/* Logo */}
-      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-        <div style={{ width: 38, height: 38, background: "#1A1818", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: 16 }}>✦</div>
-        <span style={{ fontWeight: 800, fontSize: 20, letterSpacing: -0.5 }}>PetTattoo<span style={{ color: "#F29C6B" }}>.</span></span>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+        <div style={{ width: 34, height: 34, background: "#1A1818", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: 14 }}>✦</div>
+        <span className="logo-text" style={{ fontWeight: 800, fontSize: 18, letterSpacing: -0.5 }}>PetTattoo<span style={{ color: "#F29C6B" }}>.</span></span>
       </div>
 
       {/* 步骤条 */}
-      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 6, overflow: "hidden" }}>
         {steps.map((step, idx) => {
           const isDone = currentStep > step.n;
           const isActive = currentStep === step.n;
           return (
-            <div key={step.n} style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <div style={{
-                display: "flex", alignItems: "center", gap: 7,
+            <div key={step.n} style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
+              <div className="step-item" style={{
+                display: "flex", alignItems: "center", gap: 6,
                 background: isActive ? "#1A1818" : isDone ? "rgba(242,156,107,0.15)" : "transparent",
                 color: isActive ? "#fff" : isDone ? "#D97706" : "#8A817C",
-                borderRadius: 999, padding: "6px 16px",
-                fontSize: 13, fontWeight: 700,
+                borderRadius: 999, padding: "5px 12px",
+                fontSize: 12, fontWeight: 700,
                 transition: "all 0.35s ease",
+                whiteSpace: "nowrap",
               }}>
                 <span style={{
-                  width: 22, height: 22,
+                  width: 20, height: 20,
                   background: isActive ? "rgba(255,255,255,0.15)" : isDone ? "#F29C6B" : "transparent",
                   border: isDone ? "none" : isActive ? "none" : "1.5px solid #D1C9BE",
                   borderRadius: "50%",
                   display: "inline-flex", alignItems: "center", justifyContent: "center",
-                  fontSize: 12, fontWeight: 800, flexShrink: 0,
+                  fontSize: 11, fontWeight: 800, flexShrink: 0,
                   transition: "all 0.35s ease",
                   color: isDone ? "#fff" : "inherit",
                 }}>
                   {isDone ? "✓" : step.n}
                 </span>
-                {step.label}
+                <span className="step-label">{step.label}</span>
               </div>
               {idx < steps.length - 1 && (
-                <div style={{
-                  width: 48, height: 2, borderRadius: 99,
+                <div className="step-connector" style={{
+                  width: 32, height: 2, borderRadius: 99, flexShrink: 0,
                   background: isDone ? "rgba(242,156,107,0.5)" : "rgba(26,24,24,0.08)",
                   transition: "background 0.4s ease",
                 }} />
@@ -157,14 +158,15 @@ function StepHeader({ currentStep, onReset }: { currentStep: 1 | 2 | 3; onReset?
       {currentStep === 3 && onReset ? (
         <button
           onClick={onReset}
-          style={{ display: "flex", alignItems: "center", gap: 6, background: "rgba(255,255,255,0.6)", border: "1px solid rgba(235,228,218,0.7)", borderRadius: 999, padding: "7px 16px", fontSize: 12, fontWeight: 600, color: "#6B6560", cursor: "pointer", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)", transition: "all 0.2s", whiteSpace: "nowrap" }}
+          className="reset-btn"
+          style={{ display: "flex", alignItems: "center", gap: 6, background: "rgba(255,255,255,0.6)", border: "1px solid rgba(235,228,218,0.7)", borderRadius: 999, padding: "7px 14px", fontSize: 12, fontWeight: 600, color: "#6B6560", cursor: "pointer", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)", transition: "all 0.2s", whiteSpace: "nowrap", flexShrink: 0 }}
           onMouseEnter={e => { e.currentTarget.style.background = "rgba(255,255,255,0.9)"; e.currentTarget.style.color = "#1A1818"; }}
           onMouseLeave={e => { e.currentTarget.style.background = "rgba(255,255,255,0.6)"; e.currentTarget.style.color = "#6B6560"; }}
         >
-          ← 返回重新构思
+          ← 返回
         </button>
       ) : (
-        <div style={{ width: 80 }} />
+        <div className="header-placeholder" style={{ width: 60, flexShrink: 0 }} />
       )}
     </header>
   );
@@ -325,7 +327,7 @@ export default function Home() {
       </div>
 
       {/* ── 进度条 Header（在所有步骤上方，不受 transform 容器影响） ── */}
-      <div style={{ position: "relative", zIndex: 10, padding: "0 56px" }}>
+      <div className="header-wrap" style={{ position: "relative", zIndex: 10, padding: "0 56px" }}>
         <StepHeader currentStep={currentStep} onReset={currentStep === 3 ? () => setShowResetConfirm(true) : undefined} />
       </div>
 
@@ -335,8 +337,8 @@ export default function Home() {
       {currentStep === 1 && (
         <div className="animate-phase-in" style={{ position: "relative", zIndex: 1 }}>
           {/* 主标题（由 page 统一管理） */}
-          <div style={{ textAlign: "center", padding: "28px 24px 32px", maxWidth: 1440, margin: "0 auto", boxSizing: "border-box" }}>
-            <h1 className="font-serif-sc" style={{ fontSize: "clamp(32px, 4vw, 52px)", fontWeight: 900, color: "#1A1818", lineHeight: 1.2, marginBottom: 14, letterSpacing: "0.06em" }}>
+          <div style={{ textAlign: "center", padding: "20px 16px 24px", maxWidth: 1440, margin: "0 auto", boxSizing: "border-box" }}>
+            <h1 className="font-serif-sc" style={{ fontSize: "clamp(26px, 5vw, 52px)", fontWeight: 900, color: "#1A1818", lineHeight: 1.25, marginBottom: 10, letterSpacing: "0.04em" }}>
               把对它的爱，化作永恒符号
             </h1>
             <p style={{ color: "#8A817C", fontSize: 15, margin: "0 auto", lineHeight: 1.75, maxWidth: 560 }}>
@@ -355,7 +357,7 @@ export default function Home() {
           步骤 2：AI 生成中
       ══════════════════════════════════════════ */}
       {currentStep === 2 && (
-        <div className="animate-phase-in" style={{ position: "relative", zIndex: 1, minHeight: "calc(100vh - 90px)", display: "flex", alignItems: "center", justifyContent: "center", padding: "40px 56px" }}>
+        <div className="animate-phase-in" style={{ position: "relative", zIndex: 1, minHeight: "calc(100vh - 90px)", display: "flex", alignItems: "center", justifyContent: "center", padding: "24px 16px" }}>
           <div style={{ width: "100%", maxWidth: 1440, margin: "0 auto", boxSizing: "border-box" }}>
             <div style={{ background: "rgba(255,255,255,0.40)", backdropFilter: "blur(16px)", WebkitBackdropFilter: "blur(16px)", borderRadius: 28, border: "1px solid rgba(235,228,218,0.55)", boxShadow: "0 4px 40px rgba(0,0,0,0.04)", padding: "56px 48px 64px", display: "flex", flexDirection: "column", alignItems: "center", gap: 0 }}>
 
@@ -453,11 +455,11 @@ export default function Home() {
           步骤 3：结果内嵌
       ══════════════════════════════════════════ */}
       {currentStep === 3 && (
-        <div className="animate-phase-in" style={{ position: "relative", zIndex: 1, padding: "16px 40px 24px", boxSizing: "border-box" }}>
+        <div className="animate-phase-in result-page" style={{ position: "relative", zIndex: 1, padding: "12px 16px 100px", boxSizing: "border-box" }}>
           <div style={{ width: "100%", maxWidth: 1440, margin: "0 auto" }}>
 
-            {/* 主体内容区：左右两列布局 */}
-            <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1.5fr) minmax(0, 1fr)", gap: 16, alignItems: "start" }}>
+            {/* 主体内容区：左右两列布局（移动端变单列） */}
+            <div className="result-layout" style={{ display: "grid", gridTemplateColumns: "minmax(0, 1.5fr) minmax(0, 1fr)", gap: 16, alignItems: "start" }}>
 
               {/* ══ 左列：大图 + 语录 ══ */}
               <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
@@ -474,9 +476,9 @@ export default function Home() {
                   )}
 
                   {/* 图片区 */}
-                  <div style={{ padding: "16px 28px 12px", position: "relative" }}>
+                  <div className="main-img-pad" style={{ padding: "16px 28px 12px", position: "relative" }}>
                     {activeImageUrl && originalUrl ? (
-                      <div style={{ position: "relative", zIndex: 1, maxHeight: "calc(100vh - 200px)", overflow: "hidden", borderRadius: 18 }}>
+                      <div className="slider-wrap" style={{ position: "relative", zIndex: 1, maxHeight: "calc(100vh - 200px)", overflow: "hidden", borderRadius: 18 }}>
                         <BeforeAfterSlider key={activeKey ?? ""} beforeUrl={originalUrl} afterUrl={activeImageUrl} />
                         {/* hover 时显示的重新生成覆盖层 - 在图片内部 */}
                         {activeKey && generationResults[activeKey]?.status !== "pending" && (
@@ -520,7 +522,7 @@ export default function Home() {
                         )}
                       </div>
                     ) : (
-                      <div style={{ height: "calc(100vh - 200px)", background: "#F5F0EB", borderRadius: 16, display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 12, position: "relative", zIndex: 1 }}>
+                      <div className="loading-placeholder" style={{ height: "calc(100vh - 200px)", background: "#F5F0EB", borderRadius: 16, display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 12, position: "relative", zIndex: 1 }}>
                         <svg style={{ animation: "spin 1.2s linear infinite" }} width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#F29C6B" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
                         <span style={{ fontSize: 13, color: "#9ca3af" }}>AI 正在生成手稿…</span>
                       </div>
@@ -540,7 +542,7 @@ export default function Home() {
               </div>
 
               {/* ══ 右列：功能面板 ══ */}
-              <div style={{ display: "flex", flexDirection: "column", gap: 14, paddingLeft: 36 }}>
+              <div className="result-right-panel" style={{ display: "flex", flexDirection: "column", gap: 14, paddingLeft: 36 }}>
 
                 {/* 风格切换：大卡片+底部标签名样式 */}
                 <div style={{ background: "rgba(255,255,255,0.40)", backdropFilter: "blur(16px)", WebkitBackdropFilter: "blur(16px)", borderRadius: 20, border: "1px solid rgba(235,228,218,0.55)", padding: "20px 20px 18px", boxShadow: "0 2px 16px rgba(0,0,0,0.04)" }}>
@@ -697,7 +699,33 @@ export default function Home() {
         .style-thumb-card:not(.active):hover { opacity: 1 !important; border-color: rgba(235,228,218,0.9) !important; box-shadow: 0 2px 10px rgba(0,0,0,0.08) !important; }
         .toggle-thumb { width: 20px; height: 20px; background: #fff; border-radius: 50%; position: absolute; top: 2px; left: 2px; transition: transform 0.2s; box-shadow: 0 1px 4px rgba(0,0,0,0.15); }
         .toggle-track.on .toggle-thumb { transform: translateX(20px); }
-        @media (max-width: 640px) {
+
+        /* ═══ 移动端适配 ═══ */
+        @media (max-width: 767px) {
+          /* Header */
+          .header-wrap { padding: 0 12px !important; }
+          .step-header { padding: 10px 16px !important; border-radius: 14px !important; }
+          .logo-text { display: none; }
+          .step-label { font-size: 11px !important; }
+          .step-item { padding: 4px 8px !important; gap: 4px !important; }
+          .step-connector { width: 16px !important; }
+          .reset-btn { padding: 6px 10px !important; font-size: 11px !important; }
+          .header-placeholder { width: 36px !important; }
+
+          /* 步骤1 标题 */
+          .result-page, .animate-phase-in { padding-left: 0 !important; padding-right: 0 !important; }
+
+          /* 步骤3 结果页：单列 */
+          .result-layout { grid-template-columns: 1fr !important; gap: 12px !important; }
+          .result-right-panel { padding-left: 0 !important; }
+          .main-img-pad { padding: 10px 12px 8px !important; }
+          .slider-wrap { max-height: 72vw !important; }
+          .loading-placeholder { height: 72vw !important; }
+
+          /* 结果页底部留给 CTA 栏 */
+          .result-page { padding-bottom: 90px !important; }
+
+          /* 图表格 */
           .result-img-grid-2 { grid-template-columns: 1fr 1fr; gap: 12px; }
           .result-img-grid-3 { grid-template-columns: 1fr 1fr; gap: 10px; }
         }
