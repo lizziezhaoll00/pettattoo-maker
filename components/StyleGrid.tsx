@@ -7,16 +7,15 @@ export const STYLE_CONFIGS: Record<
   StyleKey,
   { label: string; desc: string; previewImg: string }
 > = {
-  watercolor:     { label: "水彩晕染",   desc: "色彩爆发，小红书最受欢迎款",           previewImg: "https://images.unsplash.com/photo-1508672019048-805c876b67e2?w=300&q=70" },
-  lineart:        { label: "素描手绘",   desc: "铅笔质感，大师速写气质",               previewImg: "https://images.unsplash.com/photo-1583511655826-05700d52f4d9?w=300&q=70" },
-  outline:        { label: "极简单线",   desc: "一笔画轮廓，留白审美",                 previewImg: "https://images.unsplash.com/photo-1577175889968-f551f5944abd?w=300&q=70" },
-  realism:        { label: "微写实",     desc: "极致还原眼神光，高清纪念肖像",         previewImg: "https://images.unsplash.com/photo-1548199973-03cce0bbc87b?w=300&q=70" },
-  cartoon:        { label: "插画卡通",   desc: "萌炸了，Q版卡通贴纸感",               previewImg: "https://images.unsplash.com/photo-1514888286974-6c03e2ca1dba?w=300&q=70" },
-  kawaii:         { label: "萌系贴纸",   desc: "糖果配色，3D泡泡字My Baby",          previewImg: "https://images.unsplash.com/photo-1518791841217-8f162f1912da?w=300&q=70" },
-  neotraditional: { label: "美式新传统", desc: "华丽宠物肖像，皇冠花卉装饰",           previewImg: "https://images.unsplash.com/photo-1561037404-61cd46aa615b?w=300&q=70" },
-  embroidery:     { label: "立体刺绣",   desc: "以假乱真的绣线质感",                   previewImg: "https://images.unsplash.com/photo-1587300003388-59208cc962cb?w=300&q=70" },
-  geometric:      { label: "几何解构",   desc: "一半写实一半碎成多边形",               previewImg: "https://images.unsplash.com/photo-1526336024174-e58f5cdd8e13?w=300&q=70" },
-  dotwork:        { label: "点刺肌理",   desc: "颗粒磨砂，点阵高级感",                 previewImg: "https://images.unsplash.com/photo-1601758228041-f3b2795255f1?w=300&q=70" },
+  watercolor:     { label: "水彩晕染",   desc: "通透浪漫｜色彩晕染｜灵动如梦",         previewImg: "https://images.unsplash.com/photo-1508672019048-805c876b67e2?w=300&q=70" },
+  outline:        { label: "极简单线",   desc: "一笔勾勒｜留白极简｜低调优雅",         previewImg: "https://images.unsplash.com/photo-1577175889968-f551f5944abd?w=300&q=70" },
+  cartoon:        { label: "插画卡通",   desc: "萌感爆表｜Q版卡通｜活泼可爱",         previewImg: "https://images.unsplash.com/photo-1514888286974-6c03e2ca1dba?w=300&q=70" },
+  kawaii:         { label: "萌系贴纸",   desc: "日韩手绘｜糖果色系｜治愈满分",         previewImg: "https://images.unsplash.com/photo-1518791841217-8f162f1912da?w=300&q=70" },
+  lineart:        { label: "素描手绘",   desc: "铅笔质感｜交叉排线｜艺术范儿",         previewImg: "https://images.unsplash.com/photo-1583511655826-05700d52f4d9?w=300&q=70" },
+  realism:        { label: "微写实",     desc: "毛发毕现｜眼神传神｜像照片一样真",     previewImg: "https://images.unsplash.com/photo-1548199973-03cce0bbc87b?w=300&q=70" },
+  neotraditional: { label: "美式新传统", desc: "浓郁配色｜花卉装饰｜华丽宠物肖像",     previewImg: "https://images.unsplash.com/photo-1561037404-61cd46aa615b?w=300&q=70" },
+  geometric:      { label: "几何解构",   desc: "半写实半多边形｜现代感极强",           previewImg: "https://images.unsplash.com/photo-1526336024174-e58f5cdd8e13?w=300&q=70" },
+  dotwork:        { label: "点刺肌理",   desc: "疏密点阵｜颗粒磨砂｜静谧高级感",       previewImg: "https://images.unsplash.com/photo-1601758228041-f3b2795255f1?w=300&q=70" },
 };
 
 export default function StyleGrid() {

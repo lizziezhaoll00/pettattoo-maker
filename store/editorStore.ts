@@ -1,7 +1,7 @@
 import { create } from "zustand";
 
 // ─── 风格类型 ───────────────────────────────────────────────
-/** V2.9：10 种风格 key */
+/** V3.0：9 种风格 key（移除 embroidery） */
 export type StyleKey =
   | "watercolor"
   | "outline"
@@ -10,7 +10,6 @@ export type StyleKey =
   | "lineart"
   | "realism"
   | "neotraditional"
-  | "embroidery"
   | "geometric"
   | "dotwork";
 
@@ -22,7 +21,6 @@ export const ALL_STYLE_KEYS: StyleKey[] = [
   "lineart",
   "realism",
   "neotraditional",
-  "embroidery",
   "geometric",
   "dotwork",
 ];
