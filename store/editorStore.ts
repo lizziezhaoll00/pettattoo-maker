@@ -124,6 +124,10 @@ interface EditorState {
   currentStyleKey: StyleKey | null;
   setCurrentStyleKey: (key: StyleKey | null) => void;
 
+  // ── AI 生成的暖心文案 ──
+  generatedText: string;
+  setGeneratedText: (text: string) => void;
+
   // ── 部位选择（等待页可选） ──
   selectedBodyParts: BodyPart[];
   toggleBodyPart: (part: BodyPart) => void;
@@ -143,6 +147,8 @@ interface EditorState {
 
   // ── reset ──
   reset: () => void;
+  /** 仅重置图片相关状态，保留用户已选风格 */
+  resetImageOnly: () => void;
 }
 
 const initialGenerationResults = Object.fromEntries(
@@ -167,6 +173,7 @@ const initialState = {
   currentStyleKey: null as StyleKey | null,
   selectedBodyParts: [] as BodyPart[],
   selectedSize: "M" as SizeKey,
+  generatedText: "",
   // 旧版兼容
   colorMode: "color" as ColorMode,
   showWhiteBorder: false,
@@ -218,6 +225,8 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
   setCurrentStyleKey: (key) => set({ currentStyleKey: key }),
 
+  setGeneratedText: (text) => set({ generatedText: text }),
+
   toggleBodyPart: (part) => {
     const { selectedBodyParts } = get();
     if (selectedBodyParts.includes(part)) {
@@ -235,5 +244,20 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       generationResults: Object.fromEntries(
         ALL_STYLE_KEYS.map((k) => [k, { status: "idle" as GenStatus }])
       ) as Record<StyleKey, GenResult>,
+    }),
+
+  resetImageOnly: () =>
+    set({
+      originalFile: null,
+      originalUrl: null,
+      bgRemoveStatus: "idle",
+      bgRemoveError: null,
+      removedBgUrl: null,
+      isRemoving: false,
+      generationResults: Object.fromEntries(
+        ALL_STYLE_KEYS.map((k) => [k, { status: "idle" as GenStatus }])
+      ) as Record<StyleKey, GenResult>,
+      currentStyleKey: null,
+      generatedText: "",
     }),
 }));

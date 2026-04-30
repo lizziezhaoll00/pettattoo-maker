@@ -11,7 +11,6 @@ import {
 } from "@/store/editorStore";
 import { STYLE_CONFIGS } from "@/components/StyleGrid";
 import { stylize } from "@/lib/stylize";
-import { renderFinalCanvas, canvasToBlob, downloadBlob } from "@/lib/canvas";
 import DownloadModal from "@/components/DownloadModal";
 
 const ALL_SIZES: SizeKey[] = ["S", "M", "L"];
@@ -30,13 +29,14 @@ export default function ResultPage() {
     selectedSize,
     setSelectedSize,
     setGenResult,
+    generatedText,
     reset,
   } = useEditorStore();
 
   const [showDownloadModal, setShowDownloadModal] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [retryingKey, setRetryingKey] = useState<StyleKey | null>(null);
-  const [mirrorDataUrl, setMirrorDataUrl] = useState<string | null>(null);
+  const [isMirror, setIsMirror] = useState(true);
 
   const activeKey = currentStyleKey ?? selectedStyles.find(k => generationResults[k].status === "done") ?? null;
   const activeResult = activeKey ? generationResults[activeKey] : null;
@@ -54,20 +54,6 @@ export default function ResultPage() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  // 镜像预览
-  useEffect(() => {
-    if (!activeImageUrl) { setMirrorDataUrl(null); return; }
-    let cancelled = false;
-    renderFinalCanvas({
-      imageUrl: activeImageUrl, size: "S",
-      colorMode: "color", showWhiteBorder: false,
-      squareCrop: false, cropRect: null, mirror: true,
-    }).then(canvas => {
-      if (!cancelled) setMirrorDataUrl(canvas.toDataURL("image/jpeg", 0.8));
-    }).catch(() => {});
-    return () => { cancelled = true; };
-  }, [activeImageUrl]);
 
   // 重试
   const handleRetry = useCallback(async (key: StyleKey) => {
@@ -90,228 +76,336 @@ export default function ResultPage() {
     router.push("/");
   }, [reset, router]);
 
-  // 推荐尺寸提示
-  const firstBody = selectedBodyParts[0];
-  const recommendTip = firstBody
-    ? `已根据你选择的「${BODY_PART_CONFIG[firstBody].label}」部位，为你推荐 ${BODY_PART_CONFIG[firstBody].recommendedSize} 码 (${SIZE_CONFIG[BODY_PART_CONFIG[firstBody].recommendedSize].cm}cm)`
-    : null;
-
   return (
-    <div style={{ minHeight: "100vh", background: "#faf6f0", display: "flex", flexDirection: "column" }}>
-      {/* 顶部导航 */}
-      <div style={{
-        background: "#fff", borderBottom: "1px solid #f0f0f0",
-        padding: "0 24px", height: 52,
-        display: "flex", alignItems: "center", justifyContent: "space-between",
-        position: "sticky", top: 0, zIndex: 20,
-      }}>
-        <button
-          onClick={() => setShowResetConfirm(true)}
-          style={{ background: "none", border: "none", fontSize: 14, color: "#6b7280", cursor: "pointer", display: "flex", alignItems: "center", gap: 4 }}
-        >
-          ← 重新制作
-        </button>
-        <span style={{ fontSize: 14, fontWeight: 700, color: "#1a1a1a" }}>
-          {petName ? `查看独属于「${petName}」的专属印记` : "🐾 查看你的专属印记"}
-        </span>
-        <button
-          onClick={() => activeImageUrl && setShowDownloadModal(true)}
-          disabled={!activeImageUrl}
-          style={{
-            padding: "6px 16px",
-            background: activeImageUrl ? "#f59e0b" : "#e5e7eb",
-            color: activeImageUrl ? "#fff" : "#9ca3af",
-            border: "none", borderRadius: 999,
-            fontSize: 13, fontWeight: 700, cursor: activeImageUrl ? "pointer" : "not-allowed",
-          }}
-        >
-          下载
-        </button>
+    <div style={{
+      position: "fixed", inset: 0, zIndex: 50,
+      background: "rgba(253,251,248,0.97)",
+      backdropFilter: "blur(8px)",
+      overflowY: "auto",
+      display: "flex", flexDirection: "column",
+    }} className="no-scroll-modal">
+
+      {/* ── 背景流动光晕（与上传页同款） ── */}
+      <div style={{ position: "fixed", inset: 0, overflow: "hidden", pointerEvents: "none", zIndex: 0 }}>
+        <div className="animate-blob" style={{
+          position: "absolute", top: "-10%", left: "-10%",
+          width: "50vw", height: "50vw",
+          background: "rgba(242,156,107,0.08)",
+          borderRadius: "50%", filter: "blur(100px)",
+        }} />
+        <div className="animate-blob-delay-2" style={{
+          position: "absolute", bottom: "-10%", right: "-5%",
+          width: "40vw", height: "40vw",
+          background: "rgba(232,195,150,0.12)",
+          borderRadius: "50%", filter: "blur(100px)",
+        }} />
+        <div className="animate-blob-delay-4" style={{
+          position: "absolute", top: "40%", left: "30%",
+          width: "30vw", height: "30vw",
+          background: "rgba(251,207,232,0.08)",
+          borderRadius: "50%", filter: "blur(80px)",
+        }} />
       </div>
 
-      <div style={{ flex: 1, maxWidth: 960, margin: "0 auto", width: "100%", padding: "20px 24px 40px" }}>
+      <style>{`
+        .no-scroll-modal::-webkit-scrollbar { display: none; }
+        .no-scroll-modal { -ms-overflow-style: none; scrollbar-width: none; }
+        .result-image-grid-1 { max-width: 400px; margin: 0 auto; }
+        .result-image-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; max-width: 680px; margin: 0 auto; }
+        .result-image-grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+        @media (max-width: 600px) {
+          .result-image-grid-2 { grid-template-columns: 1fr 1fr; gap: 12px; }
+          .result-image-grid-3 { grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+        }
+        .size-radio:checked + .size-label { border-color: #F29C6B; background: rgba(242,156,107,0.06); color: #b45309; }
+        .toggle-track { width: 44px; height: 24px; background: #d1d5db; border-radius: 999px; position: relative; cursor: pointer; transition: background 0.2s; flex-shrink: 0; }
+        .toggle-track.on { background: #68D391; }
+        .toggle-thumb { width: 20px; height: 20px; background: #fff; border-radius: 50%; position: absolute; top: 2px; left: 2px; transition: transform 0.2s; box-shadow: 0 1px 4px rgba(0,0,0,0.15); }
+        .toggle-track.on .toggle-thumb { transform: translateX(20px); }
+      `}</style>
 
-        {/* ── 大图 + 右侧缩略图 ── */}
-        <div style={{ display: "flex", gap: 12, alignItems: "stretch", marginBottom: 0 }}>
-          {/* 左侧：风格缩略图竖排 */}
+      {/* ── 关闭按钮 ── */}
+      <button
+        onClick={() => setShowResetConfirm(true)}
+        style={{
+          position: "fixed", top: 16, right: 16, zIndex: 100,
+          width: 40, height: 40,
+          background: "rgba(0,0,0,0.06)", backdropFilter: "blur(8px)",
+          border: "none", borderRadius: "50%", cursor: "pointer",
+          display: "flex", alignItems: "center", justifyContent: "center",
+          fontSize: 18, color: "#1A1818",
+          transition: "background 0.15s",
+        }}
+        onMouseEnter={e => (e.currentTarget.style.background = "rgba(0,0,0,0.12)")}
+        onMouseLeave={e => (e.currentTarget.style.background = "rgba(0,0,0,0.06)")}
+      >
+        ✕
+      </button>
+
+      {/* ── 主内容卡片 ── */}
+      <div style={{
+        width: "100%", maxWidth: 960,
+        margin: "0 auto",
+        background: "#fff",
+        minHeight: "100vh",
+        display: "flex", flexDirection: "column",
+      }}>
+
+        {/* 图像展示区（浅灰底） */}
+        <div style={{
+          background: "#FAFAFA",
+          padding: "56px 32px 32px",
+          borderBottom: "1px solid rgba(235,228,218,0.5)",
+          position: "relative",
+        }}>
+          {/* 微弱径向渐变光晕 */}
           <div style={{
-            display: "flex", flexDirection: "column", gap: 8,
-            flexShrink: 0, width: 88, justifyContent: "flex-start", paddingTop: 2,
-          }}>
-            {selectedStyles.map(key => {
+            position: "absolute", inset: 0, pointerEvents: "none",
+            background: "radial-gradient(ellipse at center, rgba(242,156,107,0.08) 0%, transparent 70%)",
+          }} />
+
+          <div className={
+            selectedStyles.length === 1 ? "result-image-grid-1"
+            : selectedStyles.length === 2 ? "result-image-grid-2"
+            : "result-image-grid-3"
+          } style={{ position: "relative", zIndex: 1 }}>
+            {selectedStyles.map((key) => {
               const result = generationResults[key];
               const isActive = key === activeKey;
               const isRetrying = retryingKey === key;
               return (
-                <div
-                  key={key}
-                  onClick={() => {
-                    if (result.status === "error" && !isRetrying) handleRetry(key);
-                    else if (result.status === "done") setCurrentStyleKey(key);
-                  }}
-                  style={{
-                    width: "100%", borderRadius: 12, overflow: "hidden",
-                    border: `2px solid ${isActive ? "#f59e0b" : "transparent"}`,
-                    cursor: "pointer", transition: "border-color 0.2s, box-shadow 0.2s",
-                    background: "#fff", boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
-                  }}
-                  title={result.status === "error" ? "点击重试" : STYLE_CONFIGS[key].label}
-                >
-                  {result.status === "done" && result.url ? (
-                    <>
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={result.url} alt={STYLE_CONFIGS[key].label}
-                        style={{ width: "100%", aspectRatio: "1", objectFit: "cover", display: "block" }} />
-                      <div style={{ fontSize: 10, fontWeight: 700, textAlign: "center", padding: "3px 4px", color: "#374151", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                        {STYLE_CONFIGS[key].label}
+                <div key={key} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
+                  {/* 图片卡片 */}
+                  <div
+                    onClick={() => {
+                      if (result.status === "error" && !isRetrying) handleRetry(key);
+                      else if (result.status === "done") setCurrentStyleKey(key);
+                    }}
+                    onMouseEnter={e => {
+                      if (result.status === "done" && !isActive) {
+                        (e.currentTarget as HTMLDivElement).style.boxShadow = "0 4px 20px rgba(0,0,0,0.12)";
+                      }
+                    }}
+                    onMouseLeave={e => {
+                      if (!isActive) {
+                        (e.currentTarget as HTMLDivElement).style.boxShadow = "0 2px 12px rgba(0,0,0,0.06)";
+                      }
+                    }}
+                    style={{
+                      width: "100%",
+                      aspectRatio: "1",
+                      background: "#fff",
+                      borderRadius: 18,
+                      overflow: "hidden",
+                      cursor: result.status === "done" || result.status === "error" ? "pointer" : "default",
+                      border: `2px solid ${isActive ? "#F29C6B" : "transparent"}`,
+                      boxShadow: isActive
+                        ? "0 0 0 4px rgba(242,156,107,0.15), 0 4px 20px rgba(0,0,0,0.08)"
+                        : "0 2px 12px rgba(0,0,0,0.06)",
+                      transition: "border-color 0.2s, box-shadow 0.2s",
+                      position: "relative",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      padding: 0,
+                    }}
+                  >
+                    {result.status === "done" && result.url ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={result.url}
+                        alt={STYLE_CONFIGS[key].label}
+                        style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+                      />
+                    ) : result.status === "error" ? (
+                      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6, padding: "0 8px" }}>
+                        <span style={{ fontSize: 28 }}>❌</span>
+                        <span style={{ fontSize: 11, color: "#ef4444", textAlign: "center" }}>生成失败，点击重试</span>
                       </div>
-                    </>
-                  ) : result.status === "error" ? (
-                    <div style={{ aspectRatio: "1", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", background: "#fff5f5", gap: 2 }}>
-                      <span style={{ fontSize: 18 }}>❌</span>
-                      <span style={{ fontSize: 8, color: "#ef4444" }}>重试</span>
-                    </div>
-                  ) : (
-                    <div style={{ aspectRatio: "1", display: "flex", alignItems: "center", justifyContent: "center", background: "#f9fafb" }}
-                      className="animate-pulse-slow"
-                    >
-                      <span style={{ fontSize: 20 }}>⏳</span>
-                    </div>
-                  )}
+                    ) : (
+                      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }} className="animate-pulse-slow">
+                        <span style={{ fontSize: 28 }}>⏳</span>
+                        <span style={{ fontSize: 11, color: "#9ca3af" }}>{STYLE_CONFIGS[key].label}</span>
+                      </div>
+                    )}
+                    {/* 选中勾标 */}
+                    {isActive && result.status === "done" && (
+                      <div style={{
+                        position: "absolute", top: 8, right: 8,
+                        width: 24, height: 24, background: "#F29C6B",
+                        borderRadius: "50%", color: "#fff",
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        fontSize: 12, fontWeight: 700,
+                        boxShadow: "0 2px 8px rgba(242,156,107,0.4)",
+                      }}>✓</div>
+                    )}
+                    {/* 重试中 spinner */}
+                    {isRetrying && (
+                      <div style={{
+                        position: "absolute", inset: 0, background: "rgba(255,255,255,0.8)",
+                        borderRadius: 16, display: "flex", alignItems: "center", justifyContent: "center",
+                      }}>
+                        <svg style={{ animation: "spin 1s linear infinite" }} width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#F29C6B" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
+                        </svg>
+                      </div>
+                    )}
+                  </div>
+                  {/* 风格名标签 */}
+                  <span style={{
+                    fontSize: 13, fontWeight: 700, color: "#1A1818",
+                    background: "rgba(255,255,255,0.85)",
+                    padding: "5px 14px", borderRadius: 999,
+                    border: "1px solid rgba(235,228,218,0.6)",
+                    boxShadow: "0 1px 4px rgba(0,0,0,0.05)",
+                    backdropFilter: "blur(4px)",
+                  }}>
+                    {STYLE_CONFIGS[key].label}
+                  </span>
                 </div>
               );
             })}
           </div>
-
-          {/* 右侧：大图展示区 —— 完整展示生成图，不裁切 */}
-          <div style={{
-            flex: 1, minWidth: 0, borderRadius: 20, overflow: "hidden",
-            background: "#fff", position: "relative",
-            display: "flex", alignItems: "center", justifyContent: "center",
-            minHeight: 200,
-          }}>
-            {activeImageUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={activeImageUrl} alt="生成结果"
-                style={{ width: "100%", height: "auto", display: "block", borderRadius: 20 }}
-              />
-            ) : (
-              <div style={{ width: "100%", minHeight: 320, display: "flex", alignItems: "center", justifyContent: "center", background: "#f9f7f4", borderRadius: 20 }}>
-                <p style={{ fontSize: 14, color: "#9ca3af" }}>
-                  {activeKey && generationResults[activeKey]?.status === "error" ? "❌ 生成失败" : "⏳ 生成中…"}
-                </p>
-              </div>
-            )}
-            {/* 重生按钮 右下角 */}
-            <button
-              onClick={() => activeKey && handleRetry(activeKey)}
-              disabled={!activeKey || retryingKey !== null}
-              style={{
-                position: "absolute", bottom: 16, right: 14,
-                background: "rgba(255,255,255,0.92)",
-                border: "1px solid #e5e7eb", borderRadius: 20,
-                padding: "5px 14px", fontSize: 12, color: "#374151",
-                fontWeight: 600, cursor: "pointer",
-                backdropFilter: "blur(4px)", zIndex: 2,
-                transition: "background 0.15s",
-                opacity: retryingKey ? 0.5 : 1,
-              }}
-            >
-              {retryingKey ? "重生成中…" : "↺ 重生"}
-            </button>
-          </div>
         </div>
 
-        {/* ── 底部三栏调节面板 ── */}
-        <div style={{
-          display: "flex", background: "#fff", borderRadius: 20,
-          marginTop: 14, padding: "18px 16px", gap: 0,
-          boxShadow: "0 2px 16px rgba(0,0,0,0.08)", alignItems: "flex-start",
-        }}>
-          {/* 第一栏：尺寸选择 */}
-          <div style={{ flex: 1, minWidth: 0, padding: "0 12px 0 0" }}>
-            <div style={{ fontSize: 13, fontWeight: 700, color: "#374151", marginBottom: 8 }}>尺寸选择</div>
-            <div style={{ display: "flex", gap: 6 }}>
-              {ALL_SIZES.map(key => (
-                <button
-                  key={key}
-                  onClick={() => setSelectedSize(key)}
-                  style={{
-                    flex: 1, padding: "10px 4px",
-                    borderRadius: 12, textAlign: "center",
-                    border: `2px solid ${selectedSize === key ? "#f59e0b" : "#e5e7eb"}`,
-                    background: selectedSize === key ? "#fffbf0" : "#fff",
-                    fontSize: 12, fontWeight: 700, cursor: "pointer",
-                    transition: "all 0.2s",
-                    color: selectedSize === key ? "#b45309" : "#374151",
-                  }}
-                >
-                  <div style={{ fontSize: 16, fontWeight: 900 }}>{key}</div>
-                  <div style={{ fontSize: 12, margin: "1px 0" }}>{SIZE_CONFIG[key].cm}cm</div>
-                  <div style={{ fontSize: 10, color: "#9ca3af" }}>{SIZE_CONFIG[key].desc}</div>
-                </button>
-              ))}
+        {/* ── 语录卡片（有文案时显示） ── */}
+        {generatedText && (
+          <div style={{
+            padding: "28px 32px",
+            borderBottom: "1px solid rgba(235,228,218,0.5)",
+            background: "#fff",
+            display: "flex", justifyContent: "center",
+          }}>
+            <div style={{
+              maxWidth: 680, width: "100%",
+              background: "#FAFAFA",
+              borderRadius: 18, padding: "32px 40px 28px",
+              position: "relative",
+              border: "1px solid rgba(235,228,218,0.4)",
+              boxShadow: "0 2px 12px rgba(0,0,0,0.04)",
+            }}>
+              {/* 装饰引号 SVG（参照 lucide Quote 图标风格） */}
+              <svg
+                width="36" height="36" viewBox="0 0 24 24"
+                fill="none" stroke="rgba(242,156,107,0.25)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+                style={{ position: "absolute", top: 16, left: 18, pointerEvents: "none" }}
+              >
+                <path d="M3 21c3 0 7-1 7-8V5c0-1.25-.756-2.017-2-2H4c-1.25 0-2 .75-2 1.972V11c0 1.25.75 2 2 2 1 0 1 0 1 1v1c0 1-1 2-2 2s-1 .008-1 1.031V20c0 1 0 1 1 1z"/>
+                <path d="M15 21c3 0 7-1 7-8V5c0-1.25-.757-2.017-2-2h-4c-1.25 0-2 .75-2 1.972V11c0 1.25.75 2 2 2h.75c0 2.25.25 4-2.75 4v3c0 1 0 1 1 1z"/>
+              </svg>
+              <p className="font-serif-sc" style={{
+                fontSize: 16, lineHeight: 1.95,
+                color: "rgba(26,24,24,0.82)",
+                fontStyle: "italic",
+                textAlign: "center",
+                margin: 0,
+                padding: "0 20px",
+                letterSpacing: "0.04em",
+                position: "relative", zIndex: 1,
+              }}>
+                {generatedText}
+              </p>
             </div>
-            {recommendTip && (
-              <div style={{ fontSize: 11, color: "#f59e0b", marginTop: 6, fontWeight: 500, lineHeight: 1.4 }}>
-                {recommendTip}
-              </div>
-            )}
+          </div>
+        )}
+
+        {/* ── 图纸打印设置 ── */}
+        <div style={{ padding: "28px 32px 48px", background: "#fff", flex: 1 }}>
+
+          {/* 标题 */}
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 24 }}>
+            <span style={{ fontSize: 18 }}>⚙</span>
+            <h3 style={{ fontSize: 17, fontWeight: 800, color: "#1A1818", margin: 0 }}>图纸打印设置</h3>
           </div>
 
-          {/* 分隔线 */}
-          <div style={{ width: 1, background: "#f0f0f0", alignSelf: "stretch", flexShrink: 0 }} />
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 32 }}>
 
-          {/* 第二栏：镜像预览 */}
-          <div style={{ flex: 1, minWidth: 0, padding: "0 12px" }}>
-            <div style={{ fontSize: 13, fontWeight: 700, color: "#374151", marginBottom: 8, display: "flex", alignItems: "center", gap: 4 }}>
-              镜像预览
-              <span style={{ background: "#f59e0b", color: "#fff", fontSize: 9, fontWeight: 700, padding: "1px 6px", borderRadius: 20 }}>镜像</span>
+            {/* 左：物理尺寸选择 */}
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 700, color: "#374151", marginBottom: 12 }}>物理尺寸选择</div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
+                {ALL_SIZES.map(key => (
+                  <label key={key} style={{ cursor: "pointer" }}>
+                    <input
+                      type="radio" name="tattooSize" value={key}
+                      checked={selectedSize === key}
+                      onChange={() => setSelectedSize(key)}
+                      style={{ display: "none" }}
+                    />
+                    <div style={{
+                      border: `2px solid ${selectedSize === key ? "#F29C6B" : "rgba(235,228,218,0.7)"}`,
+                      borderRadius: 14, padding: "14px 8px",
+                      textAlign: "center",
+                      background: selectedSize === key ? "rgba(242,156,107,0.05)" : "#fff",
+                      transition: "all 0.2s",
+                    }}>
+                      <div style={{ fontSize: 18, fontWeight: 900, color: "#1A1818", marginBottom: 2 }}>{key}</div>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: "#F29C6B", marginBottom: 4 }}>{SIZE_CONFIG[key].cm}cm</div>
+                      <div style={{ fontSize: 11, color: "#9ca3af", lineHeight: 1.4 }}>{SIZE_CONFIG[key].desc}</div>
+                    </div>
+                  </label>
+                ))}
+              </div>
             </div>
-            <div style={{ position: "relative", display: "inline-block" }}>
-              {mirrorDataUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={mirrorDataUrl} alt="镜像预览"
-                  style={{ width: 80, height: 80, objectFit: "cover", borderRadius: 12, transform: "scaleX(-1)", display: "block" }}
-                />
-              ) : (
-                <div style={{ width: 80, height: 80, borderRadius: 12, background: "#f3f4f6", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                  <span style={{ fontSize: 11, color: "#9ca3af" }}>预览中</span>
+
+            {/* 右：转印预处理 + 下载 */}
+            <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+              <div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: "#374151", marginBottom: 12 }}>转印预处理</div>
+                <div style={{
+                  background: "#f9fafb",
+                  border: "1px solid rgba(235,228,218,0.7)",
+                  borderRadius: 14, padding: "14px 16px",
+                  display: "flex", alignItems: "center", justifyContent: "space-between",
+                  gap: 12,
+                }}>
+                  <div>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: "#1A1818", display: "flex", alignItems: "center", gap: 6, marginBottom: 3 }}>
+                      <span style={{ fontSize: 16 }}>⇌</span>
+                      开启自动镜像
+                    </div>
+                    <div style={{ fontSize: 11, color: "#9ca3af", lineHeight: 1.5 }}>纹身转印纸需镜像打印才能正向显示</div>
+                  </div>
+                  {/* Toggle */}
+                  <div
+                    className={`toggle-track ${isMirror ? "on" : ""}`}
+                    onClick={() => setIsMirror(m => !m)}
+                  >
+                    <div className="toggle-thumb" />
+                  </div>
                 </div>
-              )}
-              <div style={{ position: "absolute", bottom: 4, right: 4, background: "rgba(0,0,0,0.6)", color: "#fff", fontSize: 9, fontWeight: 700, padding: "1px 5px", borderRadius: 4 }}>
-                300DPI
               </div>
-            </div>
-            <div style={{ fontSize: 10, color: "#9ca3af", marginTop: 6, lineHeight: 1.5 }}>直接放纸打印即可</div>
-          </div>
 
-          {/* 分隔线 */}
-          <div style={{ width: 1, background: "#f0f0f0", alignSelf: "stretch", flexShrink: 0 }} />
-
-          {/* 第三栏：高级操作 + 下载 */}
-          <div style={{ flex: 1, minWidth: 0, padding: "0 0 0 12px" }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
-              <div style={{ fontSize: 13, fontWeight: 700, color: "#374151" }}>高级操作</div>
-            </div>
-            <button
-              onClick={() => activeImageUrl && setShowDownloadModal(true)}
-              disabled={!activeImageUrl}
-              style={{
-                width: "100%", padding: "14px 16px",
-                background: activeImageUrl ? "#f59e0b" : "#e5e7eb",
-                color: activeImageUrl ? "#fff" : "#9ca3af",
-                border: "none", borderRadius: 14,
-                fontSize: 14, fontWeight: 700, cursor: activeImageUrl ? "pointer" : "not-allowed",
-                marginBottom: 0, transition: "background 0.2s",
-              }}
-            >
-              {petName ? `🐾 下载「${petName}」的纹身素材包` : "🐾 下载纹身素材包"}
-            </button>
-            <div style={{ fontSize: 10, color: "#9ca3af", marginTop: 6, lineHeight: 1.4 }}>
-              *已自动为您开启镜像处理，直接打印即可使用专用纹身转印贴纸
+              {/* 下载按钮 */}
+              <button
+                onClick={() => activeImageUrl && setShowDownloadModal(true)}
+                disabled={!activeImageUrl}
+                style={{
+                  width: "100%", padding: "16px 20px",
+                  background: activeImageUrl ? "#F29C6B" : "#e5e7eb",
+                  color: activeImageUrl ? "#fff" : "#9ca3af",
+                  border: "none", borderRadius: 14,
+                  fontSize: 15, fontWeight: 800,
+                  cursor: activeImageUrl ? "pointer" : "not-allowed",
+                  display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+                  boxShadow: activeImageUrl ? "0 12px 24px rgba(242,156,107,0.35)" : "none",
+                  transition: "background 0.2s, transform 0.15s, box-shadow 0.2s",
+                  marginTop: "auto",
+                }}
+                onMouseEnter={e => {
+                  if (activeImageUrl) {
+                    (e.currentTarget as HTMLButtonElement).style.background = "#E08856";
+                    (e.currentTarget as HTMLButtonElement).style.transform = "translateY(-1px)";
+                  }
+                }}
+                onMouseLeave={e => {
+                  if (activeImageUrl) {
+                    (e.currentTarget as HTMLButtonElement).style.background = "#F29C6B";
+                    (e.currentTarget as HTMLButtonElement).style.transform = "none";
+                  }
+                }}
+              >
+                <span>⬇</span>
+                下载打印专属图纸
+              </button>
             </div>
           </div>
         </div>
@@ -322,6 +416,7 @@ export default function ResultPage() {
         <DownloadModal
           imageUrl={activeImageUrl}
           petName={petName || undefined}
+          mirror={isMirror}
           onClose={() => setShowDownloadModal(false)}
         />
       )}
@@ -354,7 +449,7 @@ export default function ResultPage() {
               </button>
               <button
                 onClick={() => { setShowResetConfirm(false); handleReset(); }}
-                style={{ flex: 1, padding: "11px 0", border: "none", borderRadius: 10, background: "#f59e0b", color: "#fff", fontSize: 14, fontWeight: 700, cursor: "pointer" }}
+                style={{ flex: 1, padding: "11px 0", border: "none", borderRadius: 10, background: "#F29C6B", color: "#fff", fontSize: 14, fontWeight: 700, cursor: "pointer" }}
               >
                 确定重做
               </button>

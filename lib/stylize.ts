@@ -62,7 +62,8 @@ export async function stylize(
   imageUrl: string,
   style: StyleKey,
   originalImageUrl?: string,
-  petName?: string
+  petName?: string,
+  extraPrompt?: string
 ): Promise<string> {
   // blob: URL 只在浏览器里有效，服务端无法访问，必须先转成 data: URL
   const dataUrl = await toDataUrl(imageUrl);
@@ -85,6 +86,7 @@ export async function stylize(
       originalImageUrl: originalDataUrl,
       style,
       petName,
+      extraPrompt,
     }),
   });
 

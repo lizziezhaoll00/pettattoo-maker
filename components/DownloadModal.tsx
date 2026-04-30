@@ -1,16 +1,26 @@
 "use client";
 
 import { useState } from "react";
-import { useEditorStore, SIZE_CONFIG, SizeKey } from "@/store/editorStore";
-import { renderFinalCanvas, canvasToBlob, downloadBlob } from "@/lib/canvas";
+import JSZip from "jszip";
+import { useEditorStore, SIZE_CONFIG, SizeKey, StyleKey } from "@/store/editorStore";
+import { renderFinalCanvas, canvasToBlob } from "@/lib/canvas";
+import { STYLE_CONFIGS } from "@/components/StyleGrid";
+
+interface DownloadItem {
+  key: StyleKey;
+  url: string;
+}
 
 interface DownloadModalProps {
   onClose: () => void;
-  imageUrl: string;
-  /** 原始抠图 URL（透明 PNG，不含风格化），用于一键下载时附带 */
-  originalUrl?: string;
+  /** 多张风格图（已完成的） */
+  items: DownloadItem[];
   /** 宠物名字，用于文件名 */
   petName?: string;
+  /** 是否镜像（默认 true）*/
+  mirror?: boolean;
+  /** 当前选中尺寸（从打印设置面板传入） */
+  selectedSize: SizeKey;
 }
 
 const TIPS = [
@@ -22,13 +32,22 @@ const TIPS = [
 
 const ALL_SIZES: SizeKey[] = ["S", "M", "L"];
 
-export default function DownloadModal({ onClose, imageUrl, petName }: DownloadModalProps) {
+export default function DownloadModal({
+  onClose,
+  items,
+  petName,
+  mirror = true,
+  selectedSize,
+}: DownloadModalProps) {
   const { colorMode, showWhiteBorder, squareCrop, cropRect, selectedBase } = useEditorStore();
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState("");
 
-  /** 渲染单个尺寸并下载 */
-  async function downloadOneSize(size: SizeKey, url: string) {
+  const namePart = petName ? `_${petName}` : "";
+  const isSingle = items.length === 1;
+
+  /** 渲染单个尺寸的 canvas blob */
+  async function renderBlob(url: string, size: SizeKey): Promise<Blob> {
     const canvas = await renderFinalCanvas({
       imageUrl: url,
       size,
@@ -36,24 +55,47 @@ export default function DownloadModal({ onClose, imageUrl, petName }: DownloadMo
       showWhiteBorder,
       squareCrop,
       cropRect: cropRect ?? null,
-      mirror: true,
+      mirror,
       isRealistic: selectedBase === "realistic",
     });
-    const blob = await canvasToBlob(canvas);
-    const namePart = petName ? `_${petName}` : "";
-    downloadBlob(blob, `pettattoo${namePart}_${SIZE_CONFIG[size].cm}cm_mirror.png`);
+    return await canvasToBlob(canvas);
   }
-
 
   const handleDownloadAll = async () => {
     setLoading(true);
     try {
-      // 下载所有三个尺寸（当前风格图）
-      for (const size of ALL_SIZES) {
-        setProgress(`正在导出 ${SIZE_CONFIG[size].label}…`);
-        await downloadOneSize(size, imageUrl);
-        // 浏览器对短时间内多次下载可能有拦截，稍微错开
-        await new Promise((r) => setTimeout(r, 300));
+      if (isSingle) {
+        // 单张：直接下载选中的三个尺寸（原逻辑）
+        const item = items[0];
+        for (const size of ALL_SIZES) {
+          setProgress(`正在导出 ${SIZE_CONFIG[size].label}…`);
+          const blob = await renderBlob(item.url, size);
+          const a = document.createElement("a");
+          a.href = URL.createObjectURL(blob);
+          a.download = `pettattoo${namePart}_${STYLE_CONFIGS[item.key].label}_${SIZE_CONFIG[size].cm}cm.png`;
+          a.click();
+          URL.revokeObjectURL(a.href);
+          await new Promise(r => setTimeout(r, 300));
+        }
+      } else {
+        // 多张：按选中尺寸打包成 zip
+        const zip = new JSZip();
+        const folder = zip.folder(`PetTattoo${namePart}`) ?? zip;
+        for (const item of items) {
+          setProgress(`正在渲染「${STYLE_CONFIGS[item.key].label}」…`);
+          const blob = await renderBlob(item.url, selectedSize);
+          folder.file(
+            `${STYLE_CONFIGS[item.key].label}_${SIZE_CONFIG[selectedSize].cm}cm.png`,
+            blob
+          );
+        }
+        setProgress("正在打包 ZIP…");
+        const zipBlob = await zip.generateAsync({ type: "blob" });
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(zipBlob);
+        a.download = `PetTattoo${namePart}_全部风格_${SIZE_CONFIG[selectedSize].cm}cm.zip`;
+        a.click();
+        URL.revokeObjectURL(a.href);
       }
 
       setProgress("");
@@ -91,19 +133,29 @@ export default function DownloadModal({ onClose, imageUrl, petName }: DownloadMo
 
         {/* 下载内容说明 */}
         <div className="mx-6 mb-4 bg-gray-50 rounded-2xl px-4 py-3 text-sm text-gray-600">
-          <p className="text-xs font-semibold text-gray-500 mb-2">📦 一键下载包含</p>
+          <p className="text-xs font-semibold text-gray-500 mb-2">📦 下载包含</p>
           <div className="flex flex-col gap-1">
-            {ALL_SIZES.map((size) => (
-              <div key={size} className="flex justify-between">
-                <span>{SIZE_CONFIG[size].label}</span>
-                <span className="font-medium text-gray-700">{SIZE_CONFIG[size].desc} · 已镜像</span>
-              </div>
-            ))}
+            {isSingle ? (
+              ALL_SIZES.map((size) => (
+                <div key={size} className="flex justify-between">
+                  <span>{SIZE_CONFIG[size].label}</span>
+                  <span className="font-medium text-gray-700">{SIZE_CONFIG[size].desc} · 已镜像</span>
+                </div>
+              ))
+            ) : (
+              items.map((item) => (
+                <div key={item.key} className="flex justify-between">
+                  <span>✦ {STYLE_CONFIGS[item.key].label}</span>
+                  <span className="font-medium text-gray-700">{SIZE_CONFIG[selectedSize].cm}cm · 已镜像</span>
+                </div>
+              ))
+            )}
           </div>
-          <div className="flex justify-between mt-2 border-t border-gray-100 pt-2">
-            <span>镜像</span>
-            <span className="font-medium text-green-600">✅ 已自动翻转（仅尺寸图）</span>
-          </div>
+          {!isSingle && (
+            <div className="mt-2 border-t border-gray-100 pt-2 text-xs text-gray-500">
+              打包为 ZIP 文件，共 {items.length} 张图纸
+            </div>
+          )}
         </div>
 
         {/* 进度提示 */}
@@ -124,7 +176,7 @@ export default function DownloadModal({ onClose, imageUrl, petName }: DownloadMo
             disabled={loading}
             className="flex-1 py-3 rounded-2xl bg-amber-400 hover:bg-amber-500 text-white text-sm font-bold transition-colors disabled:opacity-60"
           >
-            {loading ? "导出中…" : "一键下载全部 🐾"}
+            {loading ? "导出中…" : isSingle ? "一键下载全部 🐾" : "打包下载全部 🐾"}
           </button>
         </div>
       </div>
