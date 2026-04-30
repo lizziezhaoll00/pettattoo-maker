@@ -412,11 +412,12 @@ export default function ResultPage() {
       </div>
 
       {/* 下载 Modal */}
-      {showDownloadModal && activeImageUrl && (
+      {showDownloadModal && activeImageUrl && activeKey && (
         <DownloadModal
-          imageUrl={activeImageUrl}
+          items={[{ key: activeKey, url: activeImageUrl }]}
           petName={petName || undefined}
           mirror={isMirror}
+          selectedSize={selectedSize}
           onClose={() => setShowDownloadModal(false)}
         />
       )}
