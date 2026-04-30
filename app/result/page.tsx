@@ -318,30 +318,17 @@ export default function ResultPage() {
 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 32 }}>
 
-            {/* 左：物理尺寸选择 */}
+            {/* 左：物理尺寸建议（纯展示，下载时全部尺寸默认包含） */}
             <div>
-              <div style={{ fontSize: 14, fontWeight: 700, color: "#374151", marginBottom: 12 }}>物理尺寸选择</div>
+              <div style={{ fontSize: 14, fontWeight: 700, color: "#374151", marginBottom: 4 }}>物理尺寸建议</div>
+              <div style={{ fontSize: 11, color: "#9ca3af", marginBottom: 12 }}>下载包含全部尺寸</div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
                 {ALL_SIZES.map(key => (
-                  <label key={key} style={{ cursor: "pointer" }}>
-                    <input
-                      type="radio" name="tattooSize" value={key}
-                      checked={selectedSize === key}
-                      onChange={() => setSelectedSize(key)}
-                      style={{ display: "none" }}
-                    />
-                    <div style={{
-                      border: `2px solid ${selectedSize === key ? "#F29C6B" : "rgba(235,228,218,0.7)"}`,
-                      borderRadius: 14, padding: "14px 8px",
-                      textAlign: "center",
-                      background: selectedSize === key ? "rgba(242,156,107,0.05)" : "#fff",
-                      transition: "all 0.2s",
-                    }}>
-                      <div style={{ fontSize: 18, fontWeight: 900, color: "#1A1818", marginBottom: 2 }}>{key}</div>
-                      <div style={{ fontSize: 13, fontWeight: 700, color: "#F29C6B", marginBottom: 4 }}>{SIZE_CONFIG[key].cm}cm</div>
-                      <div style={{ fontSize: 11, color: "#9ca3af", lineHeight: 1.4 }}>{SIZE_CONFIG[key].desc}</div>
-                    </div>
-                  </label>
+                  <div key={key} style={{ border: "1px solid rgba(235,228,218,0.6)", borderRadius: 14, padding: "14px 8px", textAlign: "center", background: "rgba(249,250,251,0.6)" }}>
+                    <div style={{ fontSize: 18, fontWeight: 900, color: "#6B6560", marginBottom: 2 }}>{key}</div>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: "#F29C6B", marginBottom: 4 }}>{SIZE_CONFIG[key].cm}cm</div>
+                    <div style={{ fontSize: 11, color: "#9ca3af", lineHeight: 1.4 }}>{SIZE_CONFIG[key].desc}</div>
+                  </div>
                 ))}
               </div>
             </div>

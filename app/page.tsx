@@ -26,7 +26,7 @@ const ALL_SIZES: SizeKey[] = ["S", "M", "L"];
 
 // ── 拖拽前后对比组件 ──
 function BeforeAfterSlider({ beforeUrl, afterUrl }: { beforeUrl: string; afterUrl: string }) {
-  const [splitPct, setSplitPct] = useState(50);
+  const [splitPct, setSplitPct] = useState(92);
   const containerRef = useRef<HTMLDivElement>(null);
   const isDragging = useRef(false);
 
@@ -63,7 +63,7 @@ function BeforeAfterSlider({ beforeUrl, afterUrl }: { beforeUrl: string; afterUr
       style={{ position: "relative", width: "100%", aspectRatio: "5/6", maxHeight: "calc(100vh - 200px)", borderRadius: 18, overflow: "hidden", userSelect: "none", cursor: "col-resize", boxShadow: "0 4px 32px rgba(0,0,0,0.10)" }}
       onClick={e => calcPct(e.clientX)}
     >
-      {/* 底层：原始照片（右侧） */}
+      {/* 底层：原始照片 */}
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img src={beforeUrl} alt="原图" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "contain", display: "block", background: "#F5F0EB" }} />
 
@@ -80,10 +80,18 @@ function BeforeAfterSlider({ beforeUrl, afterUrl }: { beforeUrl: string; afterUr
       <div
         onMouseDown={onMouseDown}
         onTouchStart={onTouchStart}
-        style={{ position: "absolute", top: "50%", left: `${splitPct}%`, transform: "translate(-50%, -50%)", width: 44, height: 44, borderRadius: "50%", background: "rgba(26,24,24,0.88)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "col-resize", boxShadow: "0 2px 16px rgba(0,0,0,0.3)", zIndex: 10, color: "#fff", fontSize: 14, fontWeight: 700, letterSpacing: -1, userSelect: "none" }}
+        style={{ position: "absolute", top: "50%", left: `${splitPct}%`, transform: "translate(-50%, -50%)", width: 40, height: 40, borderRadius: "50%", background: "rgba(26,24,24,0.82)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "col-resize", boxShadow: "0 2px 16px rgba(0,0,0,0.3)", zIndex: 10, color: "#fff", fontSize: 13, fontWeight: 700, letterSpacing: -1, userSelect: "none" }}
       >
         ‹›
       </div>
+
+      {/* 左下角提示文字 — 左拖可对比原图 */}
+      {splitPct > 85 && (
+        <div style={{ position: "absolute", bottom: 12, left: 14, zIndex: 5, display: "flex", alignItems: "center", gap: 5, background: "rgba(26,24,24,0.6)", backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)", borderRadius: 999, padding: "5px 11px", pointerEvents: "none" }}>
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.85)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 9l-3 3 3 3"/><path d="M19 9l3 3-3 3"/><line x1="2" y1="12" x2="22" y2="12"/></svg>
+          <span style={{ fontSize: 11, color: "rgba(255,255,255,0.85)", fontWeight: 500, whiteSpace: "nowrap" }}>拖动对比原图</span>
+        </div>
+      )}
 
     </div>
   );
@@ -593,13 +601,13 @@ export default function Home() {
                     <span style={{ fontSize: 12, fontWeight: 600, color: "#9CA3AF" }}>图纸打印设置</span>
                   </div>
 
-                  {/* 尺寸 */}
-                  <div style={{ fontSize: 10, fontWeight: 600, color: "#C4BAB2", marginBottom: 8, letterSpacing: "0.05em" }}>物理尺寸选择</div>
+                  {/* 尺寸信息告知（不可选，下载时全部尺寸默认包含） */}
+                  <div style={{ fontSize: 10, fontWeight: 600, color: "#C4BAB2", marginBottom: 8, letterSpacing: "0.05em" }}>物理尺寸建议 · 下载包含全部</div>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6, marginBottom: 14 }}>
                     {ALL_SIZES.map(key => (
-                      <div key={key} onClick={() => setSelectedSize(key)} style={{ cursor: "pointer", border: `1.5px solid ${selectedSize === key ? "#F29C6B" : "rgba(235,228,218,0.7)"}`, borderRadius: 10, padding: "8px 4px", textAlign: "center", background: selectedSize === key ? "rgba(242,156,107,0.05)" : "#fff", transition: "all 0.2s" }}>
-                        <div style={{ fontSize: 14, fontWeight: 800, color: selectedSize === key ? "#1A1818" : "#6B6560", marginBottom: 1 }}>{key}</div>
-                        <div style={{ fontSize: 10, fontWeight: 600, color: selectedSize === key ? "#F29C6B" : "#C4BAB2", marginBottom: 1 }}>{SIZE_CONFIG[key].cm}cm</div>
+                      <div key={key} style={{ border: "1px solid rgba(235,228,218,0.6)", borderRadius: 10, padding: "8px 4px", textAlign: "center", background: "rgba(249,250,251,0.6)" }}>
+                        <div style={{ fontSize: 13, fontWeight: 800, color: "#6B6560", marginBottom: 1 }}>{key}</div>
+                        <div style={{ fontSize: 10, fontWeight: 600, color: "#F29C6B", marginBottom: 1 }}>{SIZE_CONFIG[key].cm}cm</div>
                         <div style={{ fontSize: 9, color: "#C4BAB2", lineHeight: 1.4 }}>{SIZE_CONFIG[key].desc}</div>
                       </div>
                     ))}
