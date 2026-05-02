@@ -8,7 +8,7 @@ export const STYLE_CONFIGS: Record<
   { label: string; desc: string; previewImg: string }
 > = {
   watercolor:     { label: "水彩晕染风",   desc: "通透浪漫｜色彩晕染｜灵动如梦",       previewImg: "/style-previews/watercolor.png" },
-  outline:        { label: "极简单线风",   desc: "一笔勾勒｜留白极简｜低调优雅",       previewImg: "/style-previews/outline.jpeg" },
+  outline:        { label: "极简单线风",   desc: "一笔勾勒｜留白极简｜低调优雅",       previewImg: "/style-previews/outline.png" },
   cartoon:        { label: "插画卡通风",   desc: "萌感爆表｜Q版卡通｜活泼可爱",       previewImg: "/style-previews/cartoon.png" },
   kawaii:         { label: "萌系贴纸风",   desc: "日韩手绘｜糖果色系｜治愈满分",       previewImg: "/style-previews/kawaii.png" },
   lineart:        { label: "素描手绘风",   desc: "铅笔质感｜交叉排线｜艺术范儿",       previewImg: "/style-previews/lineart.png" },

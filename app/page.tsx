@@ -558,7 +558,7 @@ export default function Home() {
                     <span style={{ color: "#F29C6B", fontSize: 12 }}>✦</span>
                     <span style={{ fontSize: 12, fontWeight: 600, color: "#9CA3AF" }}>切换浏览其他风格</span>
                   </div>
-                  <div style={{ display: "grid", gridTemplateColumns: `repeat(${Math.min(selectedStyles.length, 3)}, 1fr)`, gap: 8 }}>
+                  <div style={{ display: "grid", gridTemplateColumns: selectedStyles.length === 1 ? "100px" : `repeat(${Math.min(selectedStyles.length, 3)}, 1fr)`, gap: 8 }}>
                     {selectedStyles.map(key => {
                       const result = generationResults[key];
                       const isActive = key === activeKey;
