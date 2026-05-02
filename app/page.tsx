@@ -300,17 +300,20 @@ export default function Home() {
     useEditorStore.getState().resetImageOnly();
   }, []);
 
-  // 单张重新生成
-  const handleRegen = useCallback(async (key: StyleKey, extraPrompt: string) => {
-    const { removedBgUrl, bgRemoveStatus, originalUrl: origUrl, petName: name } = useEditorStore.getState();
-    const imageUrl = (bgRemoveStatus === "done" && removedBgUrl) ? removedBgUrl : origUrl;
-    if (!imageUrl) return;
-    setIsRegening(true);
-    setGenResult(key, { status: "pending" });
-    try {
-      const url = await stylize(imageUrl, key, origUrl ?? undefined, name || undefined, extraPrompt || undefined);
-      setGenResult(key, { status: "done", url });
-      setCurrentStyleKey(key);
+// 单张重新生成
+const handleRegen = useCallback(async (key: StyleKey, extraPrompt: string) => {
+const { removedBgUrl, bgRemoveStatus, originalUrl: origUrl, petName: name, generationResults: genResults } = useEditorStore.getState();
+const imageUrl = (bgRemoveStatus === "done" && removedBgUrl) ? removedBgUrl : origUrl;
+if (!imageUrl) return;
+// 取出当前风格的已生成图，微调时作为 image 主图传给模型
+const prevResult = genResults[key];
+const prevResultUrl = prevResult?.status === "done" ? prevResult.url : undefined;
+setIsRegening(true);
+setGenResult(key, { status: "pending" });
+try {
+const url = await stylize(imageUrl, key, origUrl ?? undefined, name || undefined, extraPrompt || undefined, prevResultUrl);
+setGenResult(key, { status: "done", url });
+setCurrentStyleKey(key);
     } catch (e) {
       setGenResult(key, { status: "error", error: e instanceof Error ? e.message : "生成失败" });
     } finally {

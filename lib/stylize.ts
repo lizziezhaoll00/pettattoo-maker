@@ -52,10 +52,12 @@ async function toDataUrl(url: string, maxSide = 1024): Promise<string> {
  * 调用服务端 Seedream API 进行 AI 风格化（图生图）
  * V2.9：移除串行队列，支持多路并行调用
  *
- * @param imageUrl 抠图后的图片 URL（用于风格化的主图，白底合成后传给模型）
+ * @param imageUrl 抠图后的图片 URL（普通生成时作为主图，白底合成后传给模型）
  * @param style 艺术风格 key
- * @param originalImageUrl 原始上传图（可选），传给模型帮助理解完整身形
+ * @param originalImageUrl 原始上传图（可选），保留兼容
  * @param petName 宠物名字（可选），仅 kawaii 风格带入 prompt
+ * @param extraPrompt 用户微调输入（可选），追加到 prompt
+ * @param prevResultUrl 上一次生成的图片 URL（微调时传入），作为 image 主图让模型在此基础上修改
  * 失败时直接抛出错误，由调用方展示"失败 + 点击重试"
  */
 export async function stylize(
@@ -63,7 +65,8 @@ export async function stylize(
   style: StyleKey,
   originalImageUrl?: string,
   petName?: string,
-  extraPrompt?: string
+  extraPrompt?: string,
+  prevResultUrl?: string
 ): Promise<string> {
   // blob: URL 只在浏览器里有效，服务端无法访问，必须先转成 data: URL
   const dataUrl = await toDataUrl(imageUrl);
@@ -78,6 +81,9 @@ export async function stylize(
     }
   }
 
+  // 微调时：prevResultUrl 是已生成图（data: URL 格式，已在浏览器端），直接透传给服务端
+  // 服务端会用它替代 imageUrl 作为 image 主图
+
   const res = await fetch("/api/seedream-stylize", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -87,6 +93,7 @@ export async function stylize(
       style,
       petName,
       extraPrompt,
+      prevResultUrl: prevResultUrl || undefined,
     }),
   });
 

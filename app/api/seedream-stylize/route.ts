@@ -155,7 +155,7 @@ async function toBase64DataUrl(url: string): Promise<string> {
 
 export async function POST(req: NextRequest) {
   try {
-    const { imageUrl, originalImageUrl, style, cropHint, petName } = (await req.json()) as {
+    const { imageUrl, originalImageUrl, style, cropHint, petName, extraPrompt, prevResultUrl } = (await req.json()) as {
       /** 抠图后的图片（主图，白底合成），必填 */
       imageUrl: string;
       /** 原始上传图片（可选），有时能帮助模型理解完整的身形 */
@@ -165,6 +165,10 @@ export async function POST(req: NextRequest) {
       cropHint?: string;
       /** 宠物名字（可选，仅 kawaii 风格带入 prompt） */
       petName?: string;
+      /** 用户微调输入（可选），拼接在风格 prompt 后面 */
+      extraPrompt?: string;
+      /** 上一次生成的图片（可选，微调时传入），作为 image 主图，让模型在此基础上修改 */
+      prevResultUrl?: string;
     };
 
     if (!imageUrl || !style) {
@@ -176,8 +180,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "ARK_API_KEY 未配置" }, { status: 500 });
     }
 
-    // --- 1. 准备主图（抠图后，白底合成）base64 ---
-    const imageBase64 = await toBase64DataUrl(imageUrl);
+    // --- 1. 准备主图 base64 ---
+    // 微调时：用已生成图作为 image 主图（让模型在此风格基础上修改）
+    // 普通生成时：用抠图后白底合成图
+    const imageBase64 = await toBase64DataUrl(prevResultUrl ? prevResultUrl : imageUrl);
 
     // --- 2. 原图（已不使用，只传抠图主图给 Seedream）---
     void originalImageUrl; // 保留参数接收，不再处理
@@ -194,14 +200,25 @@ export async function POST(req: NextRequest) {
     let finalStylePrompt = stylePrompt;
     if (style === "kawaii" && petName && petName.trim()) {
       const name = petName.trim();
-      // 先替换带前缀的特定模式，再替换通用模式，防止重叠替换
       finalStylePrompt = stylePrompt
         .replace(/泡泡字「My Baby」/g, `泡泡字「${name}」`)
         .replace(/「My Baby」/g, `「${name}」`);
     }
 
-    // 只使用风格 prompt，不附加原图说明
-    const prompt = finalStylePrompt;
+    // 微调模式：prompt 前缀说明"在当前图基础上微调"，并拼接用户输入
+    let prompt: string;
+    if (prevResultUrl) {
+      const basePrefix = "以上图为当前版本，在保持整体风格和构图不变的前提下，对宠物纹身设计进行局部微调。";
+      const userReq = extraPrompt?.trim()
+        ? `\n\n【用户微调要求】${extraPrompt.trim()}`
+        : "\n\n请在整体风格不变的基础上重新生成一张质量更高的版本。";
+      prompt = basePrefix + userReq;
+    } else {
+      // 普通生成：使用完整风格 prompt，若有 extraPrompt 则追加
+      prompt = extraPrompt?.trim()
+        ? `${finalStylePrompt}\n\n【额外要求】${extraPrompt.trim()}`
+        : finalStylePrompt;
+    }
 
     // --- 4. 构建请求体（支持多图：参考图 + 原图 + 抠图主图） ---
     // 每种风格从对应的 refs 目录加载本地参考图（public/<style>-refs/）
@@ -262,9 +279,11 @@ export async function POST(req: NextRequest) {
       watermark: false,       // 关闭水印
     });
 
+    void cropHint; // 已废弃，保留兼容
     console.log(
       "[seedream-stylize] 开始调用 Seedream 4.0 API，style:", style,
-      "| 多图模式:", !!originalBase64,
+      "| 微调模式:", !!prevResultUrl,
+      "| extraPrompt:", extraPrompt || "（无）",
       "| petName:", petName || "（无）"
     );
 
