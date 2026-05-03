@@ -245,7 +245,7 @@ export default function Home() {
 
     // 等待抠图完成
     let imageUrl = rbUrl;
-    if (bgStatus !== "done" || !rbUrl) {
+    if (bgStatus !== "done") {
       try {
         imageUrl = await new Promise<string>((resolve, reject) => {
           const unsubscribe = useEditorStore.subscribe((state) => {
