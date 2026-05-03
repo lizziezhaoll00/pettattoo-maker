@@ -248,21 +248,15 @@ export default function Home() {
     if (bgStatus !== "done" || !rbUrl) {
       try {
         imageUrl = await new Promise<string>((resolve, reject) => {
-          const unsubscribe = useEditorStore.subscribe(
-            (state) => state.bgRemoveStatus,
-            (newBgStatus) => {
-              if (newBgStatus === "done") {
-                const { removedBgUrl } = useEditorStore.getState();
-                if (removedBgUrl) {
-                  unsubscribe();
-                  resolve(removedBgUrl);
-                }
-              } else if (newBgStatus === "error") {
-                unsubscribe();
-                reject(new Error("抠图失败"));
-              }
+          const unsubscribe = useEditorStore.subscribe((state) => {
+            if (state.bgRemoveStatus === "done" && state.removedBgUrl) {
+              unsubscribe();
+              resolve(state.removedBgUrl);
+            } else if (state.bgRemoveStatus === "error") {
+              unsubscribe();
+              reject(new Error("抠图失败"));
             }
-          );
+          });
           // 检查是否已经完成（避免竞态条件）
           const currentState = useEditorStore.getState();
           if (currentState.bgRemoveStatus === "done" && currentState.removedBgUrl) {
