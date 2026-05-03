@@ -154,6 +154,7 @@ async function toBase64DataUrl(url: string): Promise<string> {
 }
 
 export async function POST(req: NextRequest) {
+  const requestStart = performance.now();
   try {
     const { imageUrl, originalImageUrl, style, cropHint, petName, extraPrompt, prevResultUrl } = (await req.json()) as {
       /** 抠图后的图片（主图，白底合成），必填 */
@@ -179,6 +180,8 @@ export async function POST(req: NextRequest) {
     if (!apiKey) {
       return NextResponse.json({ error: "ARK_API_KEY 未配置" }, { status: 500 });
     }
+
+    console.log(`[API 性能监测] Seedream 请求开始 - 风格: ${style}`);
 
     // --- 1. 准备主图 base64 ---
     // 微调时：用已生成图作为 image 主图（让模型在此风格基础上修改）
@@ -324,6 +327,18 @@ export async function POST(req: NextRequest) {
 
     // response_format="url" 时返回图片 URL，用 Node.js https 下载后转 base64 返回给前端
     // （前端是浏览器，不能直接访问火山 CDN；服务端中转避免跨域）
+    const downloadStart = performance.now();
+    const imgUrl = imageData.url;
+    const { data: imgBuf, contentType } = await downloadImage(imgUrl);
+    console.log(`[API 性能监测] 图片下载完成，耗时: ${(performance.now() - downloadStart).toFixed(0)}ms`);
+
+    const base64 = imgBuf.toString("base64");
+    const dataUrl = `data:${contentType};base64,${base64}`;
+
+    const totalDuration = (performance.now() - requestStart).toFixed(0);
+    console.log(`[API 性能监测] Seedream 请求完成 - 风格: ${style}，总耗时: ${totalDuration}ms`);
+
+    return NextResponse.json({ url: dataUrl });
     const imgUrl = imageData.url;
     if (!imgUrl) {
       return NextResponse.json({ error: "未返回图片 URL" }, { status: 500 });

@@ -241,11 +241,16 @@ export default function Home() {
     setIsGenerating(true);
     setCurrentStep(2); // 立即切到步骤 2
 
+    const overallStart = performance.now();
+    console.log("[性能监测] 开始生成流程");
+
     const { petName: name, originalUrl: origUrl, selectedStyles: styles, removedBgUrl: rbUrl, bgRemoveStatus: bgStatus } = useEditorStore.getState();
 
     // 等待抠图完成
     let imageUrl = rbUrl;
     if (bgStatus !== "done") {
+      console.log("[性能监测] 等待抠图完成...");
+      const waitStart = performance.now();
       try {
         imageUrl = await new Promise<string>((resolve, reject) => {
           const unsubscribe = useEditorStore.subscribe((state) => {
@@ -264,12 +269,15 @@ export default function Home() {
             resolve(currentState.removedBgUrl);
           }
         });
+        console.log(`[性能监测] 抠图完成，耗时: ${(performance.now() - waitStart).toFixed(0)}ms`);
       } catch (e) {
         setIsGenerating(false);
         generationStartedRef.current = false;
         setCurrentStep(1);
         return;
       }
+    } else {
+      console.log("[性能监测] 抠图已完成，使用缓存");
     }
 
     if (!imageUrl) {
@@ -284,6 +292,9 @@ export default function Home() {
     const finalName = name.trim() || "小天使";
     const styleLabels = styles.map(k => STYLE_CONFIGS[k]?.label ?? k).join("、");
 
+    console.log(`[性能监测] 开始生成 ${styles.length} 种风格的纹身`);
+
+    const textStart = performance.now();
     const textPromise = (async () => {
       try {
         const res = await fetch("/api/generate-text", {
@@ -293,23 +304,39 @@ export default function Home() {
         });
         if (!res.ok) throw new Error("文案生成失败");
         const { text } = await res.json();
-        if (text) setGeneratedText(text);
-      } catch { /* 静默 */ }
+        if (text) {
+          setGeneratedText(text);
+          console.log(`[性能监测] 文案生成完成，耗时: ${(performance.now() - textStart).toFixed(0)}ms`);
+        }
+      } catch (e) {
+        console.log(`[性能监测] 文案生成失败: ${e instanceof Error ? e.message : "未知错误"}`);
+      }
     })();
 
     try {
       const startTime = Date.now();
+      const styleStartTimes: Record<StyleKey, number> = {};
+
       await Promise.all([
         textPromise,
         ...styles.map(async (key: StyleKey) => {
+          styleStartTimes[key] = performance.now();
           try {
             const url = await stylize(imageUrl, key, origUrl ?? undefined, name || undefined);
+            const duration = (performance.now() - styleStartTimes[key]).toFixed(0);
+            console.log(`[性能监测] 风格 ${key} 生成完成，耗时: ${duration}ms`);
             setGenResult(key, { status: "done", url });
           } catch (e) {
+            const duration = (performance.now() - styleStartTimes[key]).toFixed(0);
+            console.log(`[性能监测] 风格 ${key} 生成失败，耗时: ${duration}ms，错误: ${e instanceof Error ? e.message : "生成失败"}`);
             setGenResult(key, { status: "error", error: e instanceof Error ? e.message : "生成失败" });
           }
         }),
       ]);
+
+      const totalDuration = (performance.now() - overallStart).toFixed(0);
+      console.log(`[性能监测] 整体流程完成，总耗时: ${totalDuration}ms`);
+
       // 确保等待页至少显示 2 秒，提升用户体验
       const elapsed = Date.now() - startTime;
       const minWaitTime = 2000;
