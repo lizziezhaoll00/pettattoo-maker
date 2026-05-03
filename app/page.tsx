@@ -243,7 +243,41 @@ export default function Home() {
 
     const { petName: name, originalUrl: origUrl, selectedStyles: styles, removedBgUrl: rbUrl, bgRemoveStatus: bgStatus } = useEditorStore.getState();
 
-    const imageUrl = (bgStatus === "done" && rbUrl) ? rbUrl : origUrl;
+    // 等待抠图完成
+    let imageUrl = rbUrl;
+    if (bgStatus !== "done" || !rbUrl) {
+      try {
+        imageUrl = await new Promise<string>((resolve, reject) => {
+          const unsubscribe = useEditorStore.subscribe(
+            (state) => state.bgRemoveStatus,
+            (newBgStatus) => {
+              if (newBgStatus === "done") {
+                const { removedBgUrl } = useEditorStore.getState();
+                if (removedBgUrl) {
+                  unsubscribe();
+                  resolve(removedBgUrl);
+                }
+              } else if (newBgStatus === "error") {
+                unsubscribe();
+                reject(new Error("抠图失败"));
+              }
+            }
+          );
+          // 检查是否已经完成（避免竞态条件）
+          const currentState = useEditorStore.getState();
+          if (currentState.bgRemoveStatus === "done" && currentState.removedBgUrl) {
+            unsubscribe();
+            resolve(currentState.removedBgUrl);
+          }
+        });
+      } catch (e) {
+        setIsGenerating(false);
+        generationStartedRef.current = false;
+        setCurrentStep(1);
+        return;
+      }
+    }
+
     if (!imageUrl) {
       setIsGenerating(false);
       generationStartedRef.current = false;
