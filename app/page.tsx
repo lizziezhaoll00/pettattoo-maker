@@ -315,7 +315,7 @@ export default function Home() {
 
     try {
       const startTime = Date.now();
-      const styleStartTimes: Record<StyleKey, number> = {};
+      const styleStartTimes = {} as Record<StyleKey, number>;
 
       await Promise.all([
         textPromise,
