@@ -16,6 +16,10 @@ export const STYLE_CONFIGS: Record<
   neotraditional: { label: "美式新传统",   desc: "浓郁配色｜华丽花卉｜复古肖像",       previewImg: "/style-previews/neotraditional.png" },
   geometric:      { label: "几何解构风",   desc: "半写实半多边形｜现代感极强",         previewImg: "/style-previews/geometric.png" },
   dotwork:        { label: "点刺肌理风",   desc: "疏密点阵｜颗粒磨砂｜静谧高级感",     previewImg: "/style-previews/dotwork.png" },
+  boldvector:     { label: "美漫粗线风",   desc: "粗黑轮廓｜矢量艺术｜高饱和色块",     previewImg: "/style-previews/boldvector.png" },
+  psychedelicpop: { label: "迷幻波普风",   desc: "霓虹配色｜波普艺术｜街头潮牌",       previewImg: "/style-previews/psychedelicpop.png" },
+  neotraditionalillustration: { label: "街头新传统", desc: "复古插画｜木刻排线｜沉稳质感", previewImg: "/style-previews/neotraditionalillustration.png" },
+  galaxyfantasy:  { label: "梦幻星际风",   desc: "宇航头盔｜星际元素｜梦幻渐变",       previewImg: "/style-previews/galaxyfantasy.png" },
 };
 
 export default function StyleGrid() {

@@ -1,7 +1,7 @@
 import { create } from "zustand";
 
 // ─── 风格类型 ───────────────────────────────────────────────
-/** V3.0：9 种风格 key（移除 embroidery） */
+/** V3.1：13 种风格 key（新增 4 种：美漫粗线风、迷幻波普风、街头新传统、梦幻星际风） */
 export type StyleKey =
   | "watercolor"
   | "outline"
@@ -11,7 +11,11 @@ export type StyleKey =
   | "realism"
   | "neotraditional"
   | "geometric"
-  | "dotwork";
+  | "dotwork"
+  | "boldvector"
+  | "psychedelicpop"
+  | "neotraditionalillustration"
+  | "galaxyfantasy";
 
 export const ALL_STYLE_KEYS: StyleKey[] = [
   "watercolor",
@@ -23,6 +27,10 @@ export const ALL_STYLE_KEYS: StyleKey[] = [
   "neotraditional",
   "geometric",
   "dotwork",
+  "boldvector",
+  "psychedelicpop",
+  "neotraditionalillustration",
+  "galaxyfantasy",
 ];
 
 /** 向后兼容旧代码引用的 ArtStyle（与 StyleKey 等价） */
