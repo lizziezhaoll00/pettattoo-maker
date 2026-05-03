@@ -266,14 +266,13 @@ export async function POST(req: NextRequest) {
     void originalBase64;
     const imageField = imageBase64;
 
-    // 当前使用 doubao-seedream-4-0-250828（4.5 无免费额度，切换到 4.0）
-    // 恢复高版本时改回对应 model id
-    // 4.0 参数：size="2K"（大写），response_format="url"，不支持 sequential_image_generation
+    // 当前使用 doubao-seedream-5-0-lite（轻量级版本，推理速度更快）
+    // 5.0 lite 参数：size="2K"（大写），response_format="url"
     const reqBody = JSON.stringify({
-      model: "doubao-seedream-4-0-250828",
+      model: "doubao-seedream-5-0-lite",
       prompt,
       image: imageField,
-      size: "2K",             // 4.0 支持大写枚举
+      size: "2K",             // 5.0 lite 支持大写枚举
       response_format: "url", // 返回图片 URL，服务端再下载
       stream: false,
       watermark: false,       // 关闭水印
@@ -281,7 +280,7 @@ export async function POST(req: NextRequest) {
 
     void cropHint; // 已废弃，保留兼容
     console.log(
-      "[seedream-stylize] 开始调用 Seedream 4.0 API，style:", style,
+      "[seedream-stylize] 开始调用 Seedream 5.0 lite API，style:", style,
       "| 微调模式:", !!prevResultUrl,
       "| extraPrompt:", extraPrompt || "（无）",
       "| petName:", petName || "（无）"
