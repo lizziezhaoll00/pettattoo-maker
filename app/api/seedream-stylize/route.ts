@@ -338,14 +338,6 @@ export async function POST(req: NextRequest) {
     const totalDuration = (performance.now() - requestStart).toFixed(0);
     console.log(`[API 性能监测] Seedream 请求完成 - 风格: ${style}，总耗时: ${totalDuration}ms`);
 
-    return NextResponse.json({ url: dataUrl });
-    const imgUrl = imageData.url;
-    if (!imgUrl) {
-      return NextResponse.json({ error: "未返回图片 URL" }, { status: 500 });
-    }
-    const { data: imgBuf, contentType } = await downloadImage(imgUrl);
-    const b64 = imgBuf.toString("base64");
-    const dataUrl = `data:${contentType};base64,${b64}`;
     return NextResponse.json({ url: dataUrl, promptUsed: prompt });
   } catch (error) {
     console.error("[seedream-stylize]", error);
