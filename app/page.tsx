@@ -348,9 +348,20 @@ export default function Home() {
       const firstDone = useEditorStore.getState().selectedStyles.find(
         k => useEditorStore.getState().generationResults[k].status === "done"
       );
-      if (firstDone) setCurrentStyleKey(firstDone);
-      setIsGenerating(false);
-      setCurrentStep(3); // 生成完毕切到步骤 3
+
+      // 检查是否至少有一个风格生成成功
+      if (firstDone) {
+        setCurrentStyleKey(firstDone);
+        setIsGenerating(false);
+        setCurrentStep(3); // 生成完毕切到步骤 3
+      } else {
+        // 所有风格都生成失败，返回步骤1并重置状态
+        console.log("[性能监测] 所有风格生成失败，返回步骤1");
+        setIsGenerating(false);
+        generationStartedRef.current = false;
+        setCurrentStep(1);
+        // 可以在这里添加错误提示
+      }
     }
   }, [setGenResult, setGeneratedText, setCurrentStyleKey, applyRecommendedSize]);
 
