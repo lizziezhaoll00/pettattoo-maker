@@ -270,6 +270,7 @@ export default function Home() {
     })();
 
     try {
+      const startTime = Date.now();
       await Promise.all([
         textPromise,
         ...styles.map(async (key: StyleKey) => {
@@ -281,6 +282,12 @@ export default function Home() {
           }
         }),
       ]);
+      // 确保等待页至少显示 2 秒，提升用户体验
+      const elapsed = Date.now() - startTime;
+      const minWaitTime = 2000;
+      if (elapsed < minWaitTime) {
+        await new Promise(r => setTimeout(r, minWaitTime - elapsed));
+      }
     } finally {
       applyRecommendedSize();
       const firstDone = useEditorStore.getState().selectedStyles.find(

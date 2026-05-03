@@ -205,14 +205,15 @@ export async function POST(req: NextRequest) {
         .replace(/「My Baby」/g, `「${name}」`);
     }
 
-    // 微调模式：prompt 前缀说明"在当前图基础上微调"，并拼接用户输入
+    // 微调模式：在原有风格 prompt 基础上，添加微调前缀和用户输入
     let prompt: string;
     if (prevResultUrl) {
       const basePrefix = "以上图为当前版本，在保持整体风格和构图不变的前提下，对宠物纹身设计进行局部微调。";
       const userReq = extraPrompt?.trim()
         ? `\n\n【用户微调要求】${extraPrompt.trim()}`
         : "\n\n请在整体风格不变的基础上重新生成一张质量更高的版本。";
-      prompt = basePrefix + userReq;
+      // 保留原有风格 prompt，确保模型理解风格要求
+      prompt = finalStylePrompt + "\n\n" + basePrefix + userReq;
     } else {
       // 普通生成：使用完整风格 prompt，若有 extraPrompt 则追加
       prompt = extraPrompt?.trim()
