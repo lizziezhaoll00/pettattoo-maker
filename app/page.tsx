@@ -682,6 +682,7 @@ setCurrentStyleKey(key);
             petName={petName || undefined}
             mirror={isMirror}
             selectedSize={selectedSize}
+            currentStyleKey={currentStyleKey || undefined}
             onClose={() => setShowDownloadModal(false)}
           />
         ) : null;

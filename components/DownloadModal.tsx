@@ -21,6 +21,8 @@ interface DownloadModalProps {
   mirror?: boolean;
   /** 当前选中尺寸（从打印设置面板传入） */
   selectedSize: SizeKey;
+  /** 当前查看的风格 key */
+  currentStyleKey?: StyleKey;
 }
 
 const TIPS = [
@@ -38,13 +40,18 @@ export default function DownloadModal({
   petName,
   mirror = true,
   selectedSize,
+  currentStyleKey,
 }: DownloadModalProps) {
   const { colorMode, showWhiteBorder, squareCrop, cropRect, selectedBase } = useEditorStore();
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState("");
 
   const namePart = petName ? `_${petName}` : "";
-  const isSingle = items.length === 1;
+
+  // 确定要下载的风格：优先使用 currentStyleKey，否则使用第一个
+  const downloadItem = currentStyleKey
+    ? items.find(item => item.key === currentStyleKey) ?? items[0]
+    : items[0];
 
   /** 渲染单个尺寸的 canvas blob */
   async function renderBlob(url: string, size: SizeKey): Promise<Blob> {
@@ -64,38 +71,21 @@ export default function DownloadModal({
   const handleDownloadAll = async () => {
     setLoading(true);
     try {
-      if (isSingle) {
-        // 单张：直接下载选中的三个尺寸（原逻辑）
-        const item = items[0];
-        for (const size of ALL_SIZES) {
-          setProgress(`正在导出 ${SIZE_CONFIG[size].label}…`);
-          const blob = await renderBlob(item.url, size);
-          const a = document.createElement("a");
-          a.href = URL.createObjectURL(blob);
-          a.download = `pettattoo${namePart}_${STYLE_CONFIGS[item.key].label}_${SIZE_CONFIG[size].cm}cm.png`;
-          a.click();
-          URL.revokeObjectURL(a.href);
-          await new Promise(r => setTimeout(r, 300));
-        }
-      } else {
-        // 多张：按选中尺寸打包成 zip
-        const zip = new JSZip();
-        const folder = zip.folder(`PetTattoo${namePart}`) ?? zip;
-        for (const item of items) {
-          setProgress(`正在渲染「${STYLE_CONFIGS[item.key].label}」…`);
-          const blob = await renderBlob(item.url, selectedSize);
-          folder.file(
-            `${STYLE_CONFIGS[item.key].label}_${SIZE_CONFIG[selectedSize].cm}cm.png`,
-            blob
-          );
-        }
-        setProgress("正在打包 ZIP…");
-        const zipBlob = await zip.generateAsync({ type: "blob" });
+      // 统一逻辑：总是下载当前查看的风格的三个尺寸
+      if (!downloadItem) {
+        alert("未找到要下载的风格");
+        return;
+      }
+
+      for (const size of ALL_SIZES) {
+        setProgress(`正在导出 ${SIZE_CONFIG[size].label}…`);
+        const blob = await renderBlob(downloadItem.url, size);
         const a = document.createElement("a");
-        a.href = URL.createObjectURL(zipBlob);
-        a.download = `PetTattoo${namePart}_全部风格_${SIZE_CONFIG[selectedSize].cm}cm.zip`;
+        a.href = URL.createObjectURL(blob);
+        a.download = `pettattoo${namePart}_${STYLE_CONFIGS[downloadItem.key].label}_${SIZE_CONFIG[size].cm}cm.png`;
         a.click();
         URL.revokeObjectURL(a.href);
+        await new Promise(r => setTimeout(r, 300));
       }
 
       setProgress("");
@@ -135,25 +125,16 @@ export default function DownloadModal({
         <div className="mx-6 mb-4 bg-gray-50 rounded-2xl px-4 py-3 text-sm text-gray-600">
           <p className="text-xs font-semibold text-gray-500 mb-2">📦 下载包含</p>
           <div className="flex flex-col gap-1">
-            {isSingle ? (
-              ALL_SIZES.map((size) => (
-                <div key={size} className="flex justify-between">
-                  <span>{SIZE_CONFIG[size].label}</span>
-                  <span className="font-medium text-gray-700">{SIZE_CONFIG[size].desc} · 已镜像</span>
-                </div>
-              ))
-            ) : (
-              items.map((item) => (
-                <div key={item.key} className="flex justify-between">
-                  <span>✦ {STYLE_CONFIGS[item.key].label}</span>
-                  <span className="font-medium text-gray-700">{SIZE_CONFIG[selectedSize].cm}cm · 已镜像</span>
-                </div>
-              ))
-            )}
+            {ALL_SIZES.map((size) => (
+              <div key={size} className="flex justify-between">
+                <span>{SIZE_CONFIG[size].label}</span>
+                <span className="font-medium text-gray-700">{SIZE_CONFIG[size].desc} · 已镜像</span>
+              </div>
+            ))}
           </div>
-          {!isSingle && (
+          {items.length > 1 && (
             <div className="mt-2 border-t border-gray-100 pt-2 text-xs text-gray-500">
-              打包为 ZIP 文件，共 {items.length} 张图纸
+              当前下载「{downloadItem ? STYLE_CONFIGS[downloadItem.key].label : '…'}」的全部尺寸
             </div>
           )}
         </div>
@@ -176,7 +157,7 @@ export default function DownloadModal({
             disabled={loading}
             className="flex-1 py-3 rounded-2xl bg-amber-400 hover:bg-amber-500 text-white text-sm font-bold transition-colors disabled:opacity-60"
           >
-            {loading ? "导出中…" : isSingle ? "一键下载全部 🐾" : "打包下载全部 🐾"}
+            {loading ? "导出中…" : "一键下载全部 🐾"}
           </button>
         </div>
       </div>
