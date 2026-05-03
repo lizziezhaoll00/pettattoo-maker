@@ -253,11 +253,19 @@ export default function Home() {
       const waitStart = performance.now();
       try {
         imageUrl = await new Promise<string>((resolve, reject) => {
+          // 设置超时：最多等待 60 秒
+          const timeout = setTimeout(() => {
+            unsubscribe();
+            reject(new Error("抠图超时，请重试"));
+          }, 60000);
+
           const unsubscribe = useEditorStore.subscribe((state) => {
             if (state.bgRemoveStatus === "done" && state.removedBgUrl) {
+              clearTimeout(timeout);
               unsubscribe();
               resolve(state.removedBgUrl);
             } else if (state.bgRemoveStatus === "error") {
+              clearTimeout(timeout);
               unsubscribe();
               reject(new Error("抠图失败"));
             }
@@ -265,12 +273,14 @@ export default function Home() {
           // 检查是否已经完成（避免竞态条件）
           const currentState = useEditorStore.getState();
           if (currentState.bgRemoveStatus === "done" && currentState.removedBgUrl) {
+            clearTimeout(timeout);
             unsubscribe();
             resolve(currentState.removedBgUrl);
           }
         });
         console.log(`[性能监测] 抠图完成，耗时: ${(performance.now() - waitStart).toFixed(0)}ms`);
       } catch (e) {
+        console.log(`[性能监测] 抠图失败: ${e instanceof Error ? e.message : "未知错误"}`);
         setIsGenerating(false);
         generationStartedRef.current = false;
         setCurrentStep(1);
