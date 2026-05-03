@@ -51,7 +51,7 @@ export async function POST(req: NextRequest) {
 【重要要求】：请将这只宠物视为正在陪伴主人的、鲜活快乐的生命。这是一份庆祝爱与陪伴的礼物，绝对不要使用任何暗示宠物已经去世、离开、或是去往"汪星/喵星/天堂"的悲伤字眼（例如：怀念、纪念、离别）。语气要积极、治愈，强调"现在的陪伴"和"未来的每一天"。只能使用中文回答。只输出寓意文案本身，不加任何前缀或解释。`;
 
       const body = JSON.stringify({
-        model: "doubao-1-5-lite-32k-250115",
+        model: "doubao-seed-2-0-lite-260215",
         messages: [
           {
             role: "system",
