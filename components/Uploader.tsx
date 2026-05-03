@@ -5,9 +5,69 @@ import { useDropzone } from "react-dropzone";
 import { useEditorStore, ALL_STYLE_KEYS, StyleKey } from "@/store/editorStore";
 import { STYLE_CONFIGS } from "@/components/StyleGrid";
 
+async function compressImage(file: File, maxSizeMB: number = 2): Promise<File> {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        let width = img.width;
+        let height = img.height;
+
+        // 如果图片太大，按比例缩小
+        const maxDimension = 1920;
+        if (width > maxDimension || height > maxDimension) {
+          const ratio = Math.min(maxDimension / width, maxDimension / height);
+          width = Math.round(width * ratio);
+          height = Math.round(height * ratio);
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        if (ctx) ctx.drawImage(img, 0, 0, width, height);
+
+        // 逐步降低质量直到文件大小满足要求
+        let quality = 0.9;
+        let blob: Blob | null = null;
+
+        const tryCompress = () => {
+          canvas.toBlob(
+            (b) => {
+              if (!b) {
+                resolve(file);
+                return;
+              }
+              blob = b;
+              const sizeMB = blob.size / (1024 * 1024);
+              if (sizeMB > maxSizeMB && quality > 0.3) {
+                quality -= 0.1;
+                tryCompress();
+              } else {
+                const compressedFile = new File([blob], file.name, { type: "image/jpeg" });
+                resolve(compressedFile);
+              }
+            },
+            "image/jpeg",
+            quality
+          );
+        };
+
+        tryCompress();
+      };
+      img.src = e.target?.result as string;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
 async function callRemoveBgSilent(file: File): Promise<string> {
+  // 先压缩图片
+  const compressedFile = await compressImage(file, 2);
+
   const formData = new FormData();
-  formData.append("image", file);
+  formData.append("image", compressedFile);
   formData.append("model", "birefnet");
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 120_000);
